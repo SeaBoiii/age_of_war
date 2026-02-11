@@ -1,38 +1,148 @@
-﻿import { AI_DECISION_INTERVAL_MS } from '../constants/balance';
+import { AI_DECISION_INTERVAL_MS } from '../constants/balance';
 import type { UnitDefinition, UnitId } from '../types';
+
+interface ForceComposition {
+  total: number;
+  frontline: number;
+  ranged: number;
+  tank: number;
+  support: number;
+}
 
 interface AiContext {
   getAiAgeIndex: () => number;
+  getEnemyAgeIndex: () => number;
   getAiGold: () => number;
+  getAiIncomePerSecond: () => number;
   isUnderPressure: () => boolean;
   getLaneAdvantage: () => number;
+  getAiBaseHpRatio: () => number;
+  getEnemyBaseHpRatio: () => number;
+  getAiTurretLevel: () => number;
+  getEnemyTurretLevel: () => number;
+  getCurrentTurretDps: () => number;
+  getNextTurretDps: () => number | null;
   getAiAdvanceCost: () => number | null;
   canAiAdvance: () => boolean;
   getAiTurretUpgradeCost: () => number | null;
   canAiUpgradeTurret: () => boolean;
   getRoster: () => UnitDefinition[];
+  getNextAgeRoster: () => UnitDefinition[] | null;
+  getAllyComposition: () => ForceComposition;
+  getEnemyComposition: () => ForceComposition;
   trySpawnUnit: (unitId: UnitId) => boolean;
   tryAdvanceAge: () => boolean;
   tryUpgradeTurret: () => boolean;
   debugLog?: (message: string) => void;
 }
 
+type SpawnRole = 'frontline' | 'ranged';
+type StrategyMode = 'defend' | 'stabilize' | 'tech' | 'pressure';
+type AiActionKind =
+  | 'advance_age'
+  | 'upgrade_turret'
+  | 'spawn_frontline'
+  | 'spawn_ranged'
+  | 'spawn_duo'
+  | 'spawn_cheapest'
+  | 'hold';
+
+interface TacticalSnapshot {
+  aiAgeIndex: number;
+  enemyAgeIndex: number;
+  aiGold: number;
+  aiIncomePerSecond: number;
+  laneAdvantage: number;
+  underPressure: boolean;
+  aiBaseHpRatio: number;
+  enemyBaseHpRatio: number;
+  aiTurretLevel: number;
+  enemyTurretLevel: number;
+  currentTurretDps: number;
+  nextTurretDps: number | null;
+  canAdvance: boolean;
+  advanceCost: number | null;
+  canUpgradeTurret: boolean;
+  turretUpgradeCost: number | null;
+  ally: ForceComposition;
+  enemy: ForceComposition;
+  currentRosterPower: number;
+  nextAgeRosterPower: number | null;
+}
+
+interface ActionCandidate {
+  kind: AiActionKind;
+  label: string;
+  reason: string;
+  cost: number;
+  primaryUnit?: UnitDefinition;
+  secondaryUnit?: UnitDefinition;
+  baseScore: number;
+  lookaheadScore: number;
+  totalScore: number;
+}
+
+const MODE_ACTION_WEIGHTS: Record<StrategyMode, Record<AiActionKind, number>> = {
+  defend: {
+    advance_age: 65,
+    upgrade_turret: 210,
+    spawn_frontline: 190,
+    spawn_ranged: 90,
+    spawn_duo: 170,
+    spawn_cheapest: 85,
+    hold: 25,
+  },
+  stabilize: {
+    advance_age: 145,
+    upgrade_turret: 130,
+    spawn_frontline: 140,
+    spawn_ranged: 125,
+    spawn_duo: 150,
+    spawn_cheapest: 100,
+    hold: 60,
+  },
+  tech: {
+    advance_age: 245,
+    upgrade_turret: 95,
+    spawn_frontline: 105,
+    spawn_ranged: 110,
+    spawn_duo: 120,
+    spawn_cheapest: 80,
+    hold: 135,
+  },
+  pressure: {
+    advance_age: 165,
+    upgrade_turret: 85,
+    spawn_frontline: 130,
+    spawn_ranged: 155,
+    spawn_duo: 185,
+    spawn_cheapest: 85,
+    hold: 45,
+  },
+};
+
 export class AiSystem {
   private decisionAccumulatorMs = 0;
 
   private decisionCount = 0;
 
-  private saveForAgeDecisions = 0;
+  private activeMode: StrategyMode = 'stabilize';
 
-  private lastSpawnRole: 'frontline' | 'ranged' | null = null;
+  private modeLockDecisions = 0;
+
+  private lastSpawnRole: SpawnRole | null = null;
+
+  private readonly recentActions: AiActionKind[] = [];
 
   public constructor(private readonly context: AiContext) {}
 
   public reset(): void {
     this.decisionAccumulatorMs = 0;
     this.decisionCount = 0;
-    this.saveForAgeDecisions = 0;
+    this.activeMode = 'stabilize';
+    this.modeLockDecisions = 0;
     this.lastSpawnRole = null;
+    this.recentActions.length = 0;
   }
 
   public update(deltaMs: number): void {
@@ -48,7 +158,46 @@ export class AiSystem {
     this.context.debugLog?.(message);
   }
 
-  private trySpawnWithTrace(unit: UnitDefinition, role: 'frontline' | 'ranged'): boolean {
+  private rememberAction(action: AiActionKind): void {
+    this.recentActions.unshift(action);
+    if (this.recentActions.length > 5) {
+      this.recentActions.length = 5;
+    }
+  }
+
+  private actionRepeatPenalty(action: AiActionKind): number {
+    const repeatCount = this.recentActions.filter((entry) => entry === action).length;
+    const mostRecentPenalty = this.recentActions[0] === action ? 14 : 0;
+    return mostRecentPenalty + repeatCount * 6;
+  }
+
+  private getUnitDps(unit: UnitDefinition): number {
+    return unit.damage * (1000 / Math.max(1, unit.attackCooldownMs));
+  }
+
+  private estimateUnitPower(unit: UnitDefinition): number {
+    const dps = this.getUnitDps(unit);
+    const tankBonus = unit.tags.includes('tank') || unit.tags.includes('defensive') ? 26 : 0;
+    const supportBonus = unit.tags.includes('support') ? 12 : 0;
+    const rangeBonus = unit.tags.includes('ranged') ? Math.min(28, unit.attackRange * 0.08) : 0;
+
+    return unit.maxHp * 0.24 + dps * 7.4 + unit.moveSpeed * 0.06 + tankBonus + supportBonus + rangeBonus;
+  }
+
+  private getAverageRosterPower(roster: UnitDefinition[]): number {
+    if (roster.length === 0) {
+      return 0;
+    }
+
+    const total = roster.reduce((sum, unit) => sum + this.estimateUnitPower(unit), 0);
+    return total / roster.length;
+  }
+
+  private resolveRole(unit: UnitDefinition): SpawnRole {
+    return unit.tags.includes('ranged') ? 'ranged' : 'frontline';
+  }
+
+  private trySpawnWithTrace(unit: UnitDefinition, role: SpawnRole): boolean {
     if (this.context.trySpawnUnit(unit.id)) {
       this.lastSpawnRole = role;
       this.debug(`action: spawned ${unit.name}`);
@@ -59,140 +208,522 @@ export class AiSystem {
     return false;
   }
 
-  private makeDecision(): void {
-    this.decisionCount += 1;
-    if (this.decisionCount % 7 === 0) {
-      this.saveForAgeDecisions = 4;
-    } else {
-      this.saveForAgeDecisions = Math.max(0, this.saveForAgeDecisions - 1);
+  private pickMode(snapshot: TacticalSnapshot): StrategyMode {
+    let proposed: StrategyMode = 'stabilize';
+
+    if (
+      snapshot.underPressure ||
+      snapshot.aiBaseHpRatio <= 0.44 ||
+      snapshot.laneAdvantage <= -160 ||
+      snapshot.enemy.frontline > snapshot.ally.frontline + 1
+    ) {
+      proposed = 'defend';
+    } else if (
+      snapshot.canAdvance &&
+      snapshot.advanceCost !== null &&
+      snapshot.aiGold >= snapshot.advanceCost * 0.58 &&
+      snapshot.laneAdvantage > -110
+    ) {
+      proposed = 'tech';
+    } else if (
+      snapshot.laneAdvantage >= 160 ||
+      (snapshot.enemyBaseHpRatio <= 0.6 && snapshot.laneAdvantage >= 60)
+    ) {
+      proposed = 'pressure';
     }
 
-    const roster = this.context.getRoster();
-    const meleeUnits = roster.filter((unit) => unit.tags.includes('melee'));
-    const rangedUnits = roster.filter((unit) => unit.tags.includes('ranged'));
+    if (proposed !== this.activeMode) {
+      if (this.modeLockDecisions > 0) {
+        this.modeLockDecisions -= 1;
+        return this.activeMode;
+      }
 
-    const tankFrontliner = [...meleeUnits]
-      .filter((unit) => unit.tags.includes('tank') || unit.tags.includes('defensive'))
-      .sort((left, right) => right.maxHp - left.maxHp)[0];
+      this.debug(`mode-switch: ${this.activeMode} -> ${proposed}`);
+      this.activeMode = proposed;
+      this.modeLockDecisions = 1;
+      return this.activeMode;
+    }
 
-    const strongestMelee = [...meleeUnits].sort((left, right) => right.maxHp - left.maxHp)[0];
-    const frontliner = tankFrontliner ?? strongestMelee;
+    if (this.modeLockDecisions > 0) {
+      this.modeLockDecisions -= 1;
+    }
 
-    const cheapMelee = [...meleeUnits].sort((left, right) => left.cost - right.cost)[0];
-    const strongRanged = [...rangedUnits].sort((left, right) => right.damage - left.damage)[0];
-    const cheapRanged = [...rangedUnits].sort((left, right) => left.cost - right.cost)[0];
+    return this.activeMode;
+  }
 
-    const aiGold = this.context.getAiGold();
-    const laneAdvantage = this.context.getLaneAdvantage();
-    const underPressure = this.context.isUnderPressure();
+  private buildSnapshot(): TacticalSnapshot {
+    const currentRoster = this.context.getRoster();
+    const nextRoster = this.context.getNextAgeRoster();
 
-    const winning = laneAdvantage > 110;
-    const dominant = laneAdvantage > 240;
-    const losing = laneAdvantage < -110;
-    const collapsing = underPressure || laneAdvantage < -240;
+    return {
+      aiAgeIndex: this.context.getAiAgeIndex(),
+      enemyAgeIndex: this.context.getEnemyAgeIndex(),
+      aiGold: this.context.getAiGold(),
+      aiIncomePerSecond: this.context.getAiIncomePerSecond(),
+      laneAdvantage: this.context.getLaneAdvantage(),
+      underPressure: this.context.isUnderPressure(),
+      aiBaseHpRatio: this.context.getAiBaseHpRatio(),
+      enemyBaseHpRatio: this.context.getEnemyBaseHpRatio(),
+      aiTurretLevel: this.context.getAiTurretLevel(),
+      enemyTurretLevel: this.context.getEnemyTurretLevel(),
+      currentTurretDps: this.context.getCurrentTurretDps(),
+      nextTurretDps: this.context.getNextTurretDps(),
+      canAdvance: this.context.canAiAdvance(),
+      advanceCost: this.context.getAiAdvanceCost(),
+      canUpgradeTurret: this.context.canAiUpgradeTurret(),
+      turretUpgradeCost: this.context.getAiTurretUpgradeCost(),
+      ally: this.context.getAllyComposition(),
+      enemy: this.context.getEnemyComposition(),
+      currentRosterPower: this.getAverageRosterPower(currentRoster),
+      nextAgeRosterPower: nextRoster ? this.getAverageRosterPower(nextRoster) : null,
+    };
+  }
 
-    this.debug(
-      `decision#${this.decisionCount} age=${this.context.getAiAgeIndex() + 1} gold=${Math.floor(
-        aiGold,
-      )} laneAdv=${Math.floor(laneAdvantage)} pressure=${underPressure ? 'high' : 'low'}`,
+  private selectFrontliner(roster: UnitDefinition[], mode: StrategyMode): UnitDefinition | undefined {
+    const frontlinePool = roster.filter(
+      (unit) => unit.tags.includes('melee') || unit.tags.includes('tank') || unit.tags.includes('defensive'),
     );
 
-    // Emergency defense: if we may lose lane, drop frontline immediately.
-    if (collapsing && frontliner) {
-      this.debug(`plan: emergency frontline ${frontliner.name}`);
-      if (this.trySpawnWithTrace(frontliner, 'frontline')) {
-        return;
-      }
+    if (frontlinePool.length === 0) {
+      return undefined;
     }
 
-    const advanceCost = this.context.getAiAdvanceCost();
-    const canAdvance = this.context.canAiAdvance() && advanceCost !== null;
+    const sorted = [...frontlinePool].sort((left, right) => {
+      const leftTankiness = left.maxHp + (left.tags.includes('tank') || left.tags.includes('defensive') ? 120 : 0);
+      const rightTankiness =
+        right.maxHp + (right.tags.includes('tank') || right.tags.includes('defensive') ? 120 : 0);
 
-    // Prioritize age progression because newer units are stronger.
-    if (canAdvance && advanceCost !== null && aiGold >= advanceCost) {
-      const shouldAdvanceNow =
-        !collapsing &&
-        (
-          dominant ||
-          winning ||
-          this.saveForAgeDecisions > 0 ||
-          this.decisionCount % 2 === 0 ||
-          aiGold >= advanceCost * 1.18
-        );
+      const leftModeBonus = mode === 'defend' ? leftTankiness * 0.32 : leftTankiness * 0.14;
+      const rightModeBonus = mode === 'defend' ? rightTankiness * 0.32 : rightTankiness * 0.14;
 
-      if (shouldAdvanceNow) {
-        this.debug(`plan: advance age (cost ${Math.floor(advanceCost)})`);
+      const leftScore = this.estimateUnitPower(left) + leftModeBonus - left.cost * 0.42;
+      const rightScore = this.estimateUnitPower(right) + rightModeBonus - right.cost * 0.42;
+      return rightScore - leftScore;
+    });
+
+    return sorted[0];
+  }
+
+  private selectRanged(roster: UnitDefinition[], mode: StrategyMode): UnitDefinition | undefined {
+    const rangedPool = roster.filter((unit) => unit.tags.includes('ranged'));
+    if (rangedPool.length === 0) {
+      return undefined;
+    }
+
+    const sorted = [...rangedPool].sort((left, right) => {
+      const leftScore =
+        this.getUnitDps(left) * 8 +
+        left.attackRange * 0.26 +
+        (mode === 'pressure' || mode === 'tech' ? 20 : 6) -
+        left.cost * 0.36;
+
+      const rightScore =
+        this.getUnitDps(right) * 8 +
+        right.attackRange * 0.26 +
+        (mode === 'pressure' || mode === 'tech' ? 20 : 6) -
+        right.cost * 0.36;
+
+      return rightScore - leftScore;
+    });
+
+    return sorted[0];
+  }
+
+  private computeBaseScore(candidate: ActionCandidate, snapshot: TacticalSnapshot, mode: StrategyMode): number {
+    const frontlineNeed = Math.max(0, snapshot.enemy.frontline - snapshot.ally.frontline);
+    const rangedNeed = Math.max(0, snapshot.ally.frontline - snapshot.ally.ranged);
+    const lane = snapshot.laneAdvantage;
+    const hpRisk = (1 - snapshot.aiBaseHpRatio) * 130;
+
+    let score = MODE_ACTION_WEIGHTS[mode][candidate.kind];
+    score -= this.actionRepeatPenalty(candidate.kind);
+
+    switch (candidate.kind) {
+      case 'advance_age': {
+        const ageGap = snapshot.enemyAgeIndex - snapshot.aiAgeIndex;
+        if (snapshot.advanceCost !== null) {
+          score += snapshot.aiGold >= snapshot.advanceCost ? 48 : -70;
+          score += snapshot.aiGold >= snapshot.advanceCost * 0.7 ? 18 : 0;
+        }
+
+        score += ageGap > 0 ? 35 : 0;
+        score += lane > 120 ? 24 : lane < -120 ? -32 : 6;
+        score -= snapshot.underPressure ? 65 : 0;
+        score -= snapshot.aiBaseHpRatio < 0.45 ? 45 : 0;
+        break;
+      }
+      case 'upgrade_turret': {
+        const turretGain =
+          snapshot.nextTurretDps !== null ? Math.max(0, snapshot.nextTurretDps - snapshot.currentTurretDps) : 0;
+        score += turretGain * 0.55;
+        score += frontlineNeed * 22 + hpRisk;
+        score += snapshot.enemyTurretLevel > snapshot.aiTurretLevel ? 14 : 0;
+
+        if (mode === 'tech' && snapshot.advanceCost !== null && snapshot.aiGold >= snapshot.advanceCost * 0.85) {
+          score -= 44;
+        }
+        break;
+      }
+      case 'spawn_frontline': {
+        if (!candidate.primaryUnit) {
+          break;
+        }
+
+        score += this.estimateUnitPower(candidate.primaryUnit) * 0.2;
+        score += frontlineNeed * 30;
+        score += snapshot.underPressure ? 34 : 0;
+        score += lane < -80 ? 22 : 0;
+        score += this.lastSpawnRole === 'ranged' ? 10 : 0;
+        break;
+      }
+      case 'spawn_ranged': {
+        if (!candidate.primaryUnit) {
+          break;
+        }
+
+        score += this.estimateUnitPower(candidate.primaryUnit) * 0.22;
+        score += rangedNeed * 24;
+        score += lane > 80 ? 18 : 0;
+        score -= snapshot.underPressure && snapshot.ally.frontline < snapshot.enemy.frontline ? 40 : 0;
+        score += this.lastSpawnRole === 'frontline' ? 10 : 0;
+        break;
+      }
+      case 'spawn_duo': {
+        if (!candidate.primaryUnit || !candidate.secondaryUnit) {
+          break;
+        }
+
+        const pairPower =
+          this.estimateUnitPower(candidate.primaryUnit) + this.estimateUnitPower(candidate.secondaryUnit);
+        score += pairPower * 0.18;
+        score += frontlineNeed > 0 || rangedNeed > 0 ? 30 : 10;
+        score += snapshot.underPressure ? 16 : 0;
+        break;
+      }
+      case 'spawn_cheapest': {
+        if (!candidate.primaryUnit) {
+          break;
+        }
+
+        score += this.estimateUnitPower(candidate.primaryUnit) * 0.12;
+        score += snapshot.underPressure ? 12 : 0;
+        break;
+      }
+      case 'hold': {
+        if (snapshot.advanceCost !== null) {
+          const remaining = snapshot.advanceCost - snapshot.aiGold;
+          if (remaining > 0 && remaining <= snapshot.advanceCost * 0.36) {
+            score += mode === 'tech' ? 56 : 24;
+          } else if (remaining <= 0) {
+            score -= 34;
+          }
+        }
+
+        score += lane > 90 ? 8 : 0;
+        score -= snapshot.underPressure ? 62 : 0;
+        break;
+      }
+      default:
+        break;
+    }
+
+    if (candidate.cost > 0) {
+      if (snapshot.aiGold < candidate.cost) {
+        score -= 150;
+      } else {
+        score += 12;
+      }
+
+      const spendRatio = candidate.cost / Math.max(1, snapshot.aiGold);
+      if (spendRatio > 0.92 && candidate.kind !== 'advance_age') {
+        score -= 16;
+      }
+
+      score -= candidate.cost * 0.04;
+    }
+
+    return score;
+  }
+
+  private computeLookaheadScore(candidate: ActionCandidate, snapshot: TacticalSnapshot, mode: StrategyMode): number {
+    const horizonSec = 3.2;
+    const laneMomentumFromForces =
+      (snapshot.ally.frontline - snapshot.enemy.frontline) * 14 +
+      (snapshot.ally.ranged - snapshot.enemy.ranged) * 9 +
+      (snapshot.ally.tank - snapshot.enemy.tank) * 7;
+
+    const unitPowerContribution =
+      (candidate.primaryUnit ? this.estimateUnitPower(candidate.primaryUnit) : 0) +
+      (candidate.secondaryUnit ? this.estimateUnitPower(candidate.secondaryUnit) : 0);
+
+    const turretContribution =
+      candidate.kind === 'upgrade_turret' && snapshot.nextTurretDps !== null
+        ? Math.max(0, snapshot.nextTurretDps - snapshot.currentTurretDps) * 1.8
+        : 0;
+
+    const ageContribution =
+      candidate.kind === 'advance_age' && snapshot.nextAgeRosterPower !== null
+        ? Math.max(0, snapshot.nextAgeRosterPower - snapshot.currentRosterPower) * 0.25
+        : 0;
+
+    const actionLaneImpact = unitPowerContribution * 0.32 + turretContribution + ageContribution;
+    const projectedLane =
+      snapshot.laneAdvantage + laneMomentumFromForces * 0.22 + actionLaneImpact + (snapshot.underPressure ? -18 : 8);
+
+    const projectedGold =
+      snapshot.aiGold -
+      (snapshot.aiGold >= candidate.cost ? candidate.cost : 0) +
+      snapshot.aiIncomePerSecond * horizonSec;
+
+    let score = (projectedLane - snapshot.laneAdvantage) * 0.55;
+    score += Math.max(0, projectedLane) * 0.08;
+    score -= Math.max(0, -projectedLane) * 0.1;
+
+    const survivalDelta = snapshot.aiBaseHpRatio - snapshot.enemyBaseHpRatio;
+    score += survivalDelta * 24;
+
+    if (mode === 'tech' && snapshot.advanceCost !== null && projectedGold >= snapshot.advanceCost) {
+      score += 26;
+    }
+
+    if (mode === 'defend') {
+      score += Math.max(0, projectedLane + 120) * 0.04;
+    }
+
+    if (candidate.kind === 'hold' && snapshot.underPressure) {
+      score -= 38;
+    }
+
+    if (candidate.kind === 'advance_age' && snapshot.underPressure && projectedLane < 40) {
+      score -= 30;
+    }
+
+    return score;
+  }
+
+  private evaluateCandidate(
+    candidate: Omit<ActionCandidate, 'baseScore' | 'lookaheadScore' | 'totalScore'>,
+    snapshot: TacticalSnapshot,
+    mode: StrategyMode,
+  ): ActionCandidate {
+    const emptyScores = {
+      ...candidate,
+      baseScore: 0,
+      lookaheadScore: 0,
+      totalScore: 0,
+    };
+
+    const baseScore = this.computeBaseScore(emptyScores, snapshot, mode);
+    const lookaheadScore = this.computeLookaheadScore(emptyScores, snapshot, mode);
+
+    return {
+      ...candidate,
+      baseScore,
+      lookaheadScore,
+      totalScore: baseScore + lookaheadScore,
+    };
+  }
+
+  private tryExecuteCandidate(candidate: ActionCandidate): boolean {
+    switch (candidate.kind) {
+      case 'advance_age': {
         if (this.context.tryAdvanceAge()) {
           this.debug('action: advanced to next age');
-          return;
+          return true;
         }
+
         this.debug('action-failed: age advance blocked');
+        return false;
       }
-    }
-
-    // If winning and close to age-up, spend less on units and save.
-    if (
-      canAdvance &&
-      advanceCost !== null &&
-      aiGold < advanceCost &&
-      winning &&
-      aiGold >= advanceCost * 0.65 &&
-      !collapsing
-    ) {
-      this.debug(`plan: hold gold for age (${Math.floor(aiGold)}/${Math.floor(advanceCost)})`);
-      return;
-    }
-
-    const turretUpgradeCost = this.context.getAiTurretUpgradeCost();
-
-    // When not winning, focus tower progression for defensive stability.
-    if (
-      this.context.canAiUpgradeTurret() &&
-      turretUpgradeCost !== null &&
-      aiGold >= turretUpgradeCost &&
-      (!winning || collapsing || this.decisionCount % 3 === 0)
-    ) {
-      this.debug(`plan: upgrade turret (cost ${Math.floor(turretUpgradeCost)})`);
-      if (this.context.tryUpgradeTurret()) {
-        this.debug('action: upgraded turret');
-        return;
-      }
-      this.debug('action-failed: turret upgrade blocked');
-    }
-
-    // Build formations: frontline first, then ranged support behind it.
-    if (frontliner && strongRanged) {
-      const shouldLeadWithFrontline =
-        this.lastSpawnRole !== 'frontline' || collapsing || losing || this.decisionCount % 4 === 0;
-
-      if (shouldLeadWithFrontline) {
-        this.debug(`plan: frontline ${frontliner.name} then ranged ${strongRanged.name}`);
-        if (this.trySpawnWithTrace(frontliner, 'frontline')) {
-          const refreshedGold = this.context.getAiGold();
-          if (!collapsing && refreshedGold >= strongRanged.cost * 1.1) {
-            this.debug(`plan: follow-up ranged ${strongRanged.name}`);
-            this.trySpawnWithTrace(strongRanged, 'ranged');
-          }
-          return;
+      case 'upgrade_turret': {
+        if (this.context.tryUpgradeTurret()) {
+          this.debug('action: upgraded turret');
+          return true;
         }
+
+        this.debug('action-failed: turret upgrade blocked');
+        return false;
+      }
+      case 'spawn_frontline':
+      case 'spawn_ranged':
+      case 'spawn_cheapest': {
+        if (!candidate.primaryUnit) {
+          return false;
+        }
+
+        return this.trySpawnWithTrace(candidate.primaryUnit, this.resolveRole(candidate.primaryUnit));
+      }
+      case 'spawn_duo': {
+        if (!candidate.primaryUnit || !candidate.secondaryUnit) {
+          return false;
+        }
+
+        const firstRole = this.resolveRole(candidate.primaryUnit);
+        if (!this.trySpawnWithTrace(candidate.primaryUnit, firstRole)) {
+          return false;
+        }
+
+        if (this.context.getAiGold() >= candidate.secondaryUnit.cost) {
+          this.trySpawnWithTrace(candidate.secondaryUnit, this.resolveRole(candidate.secondaryUnit));
+        }
+        return true;
+      }
+      case 'hold': {
+        this.debug('action: hold and bank resources');
+        return true;
+      }
+      default:
+        return false;
+    }
+  }
+
+  private makeDecision(): void {
+    this.decisionCount += 1;
+
+    const snapshot = this.buildSnapshot();
+    const mode = this.pickMode(snapshot);
+    const roster = this.context.getRoster();
+    const frontliner = this.selectFrontliner(roster, mode);
+    const ranged = this.selectRanged(roster, mode);
+    const cheapest = [...roster].sort((left, right) => left.cost - right.cost)[0];
+
+    this.debug(
+      `decision#${this.decisionCount} mode=${mode} age=${snapshot.aiAgeIndex + 1} enemyAge=${snapshot.enemyAgeIndex + 1} gold=${Math.floor(snapshot.aiGold)} laneAdv=${Math.floor(snapshot.laneAdvantage)} pressure=${snapshot.underPressure ? 'high' : 'low'}`,
+    );
+
+    const candidates: ActionCandidate[] = [];
+
+    candidates.push(
+      this.evaluateCandidate(
+        {
+          kind: 'hold',
+          label: 'Hold',
+          reason: 'Banking for better timing',
+          cost: 0,
+        },
+        snapshot,
+        mode,
+      ),
+    );
+
+    if (snapshot.canAdvance && snapshot.advanceCost !== null) {
+      candidates.push(
+        this.evaluateCandidate(
+          {
+            kind: 'advance_age',
+            label: 'Advance Age',
+            reason: 'Unlock stronger roster',
+            cost: snapshot.advanceCost,
+          },
+          snapshot,
+          mode,
+        ),
+      );
+    }
+
+    if (snapshot.canUpgradeTurret && snapshot.turretUpgradeCost !== null) {
+      candidates.push(
+        this.evaluateCandidate(
+          {
+            kind: 'upgrade_turret',
+            label: 'Upgrade Turret',
+            reason: 'Raise defensive DPS',
+            cost: snapshot.turretUpgradeCost,
+          },
+          snapshot,
+          mode,
+        ),
+      );
+    }
+
+    if (frontliner) {
+      candidates.push(
+        this.evaluateCandidate(
+          {
+            kind: 'spawn_frontline',
+            label: `Spawn ${frontliner.name}`,
+            reason: 'Frontline control',
+            cost: frontliner.cost,
+            primaryUnit: frontliner,
+          },
+          snapshot,
+          mode,
+        ),
+      );
+    }
+
+    if (ranged) {
+      candidates.push(
+        this.evaluateCandidate(
+          {
+            kind: 'spawn_ranged',
+            label: `Spawn ${ranged.name}`,
+            reason: 'Backline damage support',
+            cost: ranged.cost,
+            primaryUnit: ranged,
+          },
+          snapshot,
+          mode,
+        ),
+      );
+    }
+
+    if (frontliner && ranged) {
+      const duoCost = frontliner.cost + ranged.cost;
+      candidates.push(
+        this.evaluateCandidate(
+          {
+            kind: 'spawn_duo',
+            label: `${frontliner.name} + ${ranged.name}`,
+            reason: 'Frontline and ranged formation',
+            cost: duoCost,
+            primaryUnit: frontliner,
+            secondaryUnit: ranged,
+          },
+          snapshot,
+          mode,
+        ),
+      );
+    }
+
+    if (cheapest) {
+      candidates.push(
+        this.evaluateCandidate(
+          {
+            kind: 'spawn_cheapest',
+            label: `Spawn ${cheapest.name}`,
+            reason: 'Cheap tempo',
+            cost: cheapest.cost,
+            primaryUnit: cheapest,
+          },
+          snapshot,
+          mode,
+        ),
+      );
+    }
+
+    const rankedCandidates = [...candidates].sort((left, right) => right.totalScore - left.totalScore);
+
+    const topPreview = rankedCandidates
+      .slice(0, 3)
+      .map((candidate) => `${candidate.label}=${candidate.totalScore.toFixed(1)}`)
+      .join(' | ');
+    this.debug(`plans: ${topPreview}`);
+
+    for (const candidate of rankedCandidates) {
+      if (candidate.cost > 0 && this.context.getAiGold() < candidate.cost && candidate.kind !== 'hold') {
+        continue;
       }
 
-      this.debug(`plan: support with ranged ${strongRanged.name}`);
-      if (this.trySpawnWithTrace(strongRanged, 'ranged')) {
+      if (this.tryExecuteCandidate(candidate)) {
+        this.rememberAction(candidate.kind);
+        this.debug(
+          `selected: ${candidate.label} score=${candidate.totalScore.toFixed(1)} reason=${candidate.reason} (base=${candidate.baseScore.toFixed(1)}, lookahead=${candidate.lookaheadScore.toFixed(1)})`,
+        );
         return;
       }
     }
 
-    if (cheapMelee && this.context.getAiGold() >= cheapMelee.cost) {
-      this.debug(`plan: fallback melee ${cheapMelee.name}`);
-      if (this.trySpawnWithTrace(cheapMelee, 'frontline')) {
-        return;
-      }
-    }
-
-    if (cheapRanged && this.context.getAiGold() >= cheapRanged.cost) {
-      this.debug(`plan: fallback ranged ${cheapRanged.name}`);
-      this.trySpawnWithTrace(cheapRanged, 'ranged');
-    }
+    this.debug('action: no viable move');
   }
 }

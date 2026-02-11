@@ -153,14 +153,28 @@ export class BattleScene extends Phaser.Scene {
 
     this.aiSystem = new AiSystem({
       getAiAgeIndex: () => this.aiAgeIndex,
+      getEnemyAgeIndex: () => this.playerAgeIndex,
       getAiGold: () => this.aiGold,
+      getAiIncomePerSecond: () => this.aiIncomePerSecond,
       isUnderPressure: () => this.getFrontX('player') > this.aiBase.x - 255,
       getLaneAdvantage: () => this.getLaneAdvantage('ai'),
+      getAiBaseHpRatio: () => this.aiBase.hp / Math.max(1, this.aiBase.maxHp),
+      getEnemyBaseHpRatio: () => this.playerBase.hp / Math.max(1, this.playerBase.maxHp),
+      getAiTurretLevel: () => this.aiBase.turretLevel,
+      getEnemyTurretLevel: () => this.playerBase.turretLevel,
+      getCurrentTurretDps: () => this.getTurretDps('ai', this.aiBase.turretLevel),
+      getNextTurretDps: () =>
+        canUpgradeTurret(this.aiAgeIndex, this.aiBase.turretLevel)
+          ? this.getTurretDps('ai', this.aiBase.turretLevel + 1)
+          : null,
       getAiAdvanceCost: () => getAgeDefinition(this.aiAgeIndex).advanceCost,
       canAiAdvance: () => canAdvanceAge(this.aiAgeIndex),
       getAiTurretUpgradeCost: () => getTurretUpgradeCost(this.aiAgeIndex, this.aiBase.turretLevel),
       canAiUpgradeTurret: () => canUpgradeTurret(this.aiAgeIndex, this.aiBase.turretLevel),
       getRoster: () => getUnitsForAge(this.aiAgeIndex),
+      getNextAgeRoster: () => (canAdvanceAge(this.aiAgeIndex) ? getUnitsForAge(this.aiAgeIndex + 1) : null),
+      getAllyComposition: () => this.getForceComposition('ai'),
+      getEnemyComposition: () => this.getForceComposition('player'),
       trySpawnUnit: (unitId) => this.trySpawnUnit('ai', unitId),
       tryAdvanceAge: () => this.tryAdvanceAge('ai'),
       tryUpgradeTurret: () => this.tryUpgradeTurret('ai'),
@@ -169,14 +183,29 @@ export class BattleScene extends Phaser.Scene {
 
     this.playerAiSystem = new AiSystem({
       getAiAgeIndex: () => this.playerAgeIndex,
+      getEnemyAgeIndex: () => this.aiAgeIndex,
       getAiGold: () => this.playerGold,
+      getAiIncomePerSecond: () => this.playerIncomePerSecond,
       isUnderPressure: () => this.getFrontX('ai') < this.playerBase.x + 255,
       getLaneAdvantage: () => this.getLaneAdvantage('player'),
+      getAiBaseHpRatio: () => this.playerBase.hp / Math.max(1, this.playerBase.maxHp),
+      getEnemyBaseHpRatio: () => this.aiBase.hp / Math.max(1, this.aiBase.maxHp),
+      getAiTurretLevel: () => this.playerBase.turretLevel,
+      getEnemyTurretLevel: () => this.aiBase.turretLevel,
+      getCurrentTurretDps: () => this.getTurretDps('player', this.playerBase.turretLevel),
+      getNextTurretDps: () =>
+        canUpgradeTurret(this.playerAgeIndex, this.playerBase.turretLevel)
+          ? this.getTurretDps('player', this.playerBase.turretLevel + 1)
+          : null,
       getAiAdvanceCost: () => getAgeDefinition(this.playerAgeIndex).advanceCost,
       canAiAdvance: () => canAdvanceAge(this.playerAgeIndex),
       getAiTurretUpgradeCost: () => getTurretUpgradeCost(this.playerAgeIndex, this.playerBase.turretLevel),
       canAiUpgradeTurret: () => canUpgradeTurret(this.playerAgeIndex, this.playerBase.turretLevel),
       getRoster: () => getUnitsForAge(this.playerAgeIndex),
+      getNextAgeRoster: () =>
+        canAdvanceAge(this.playerAgeIndex) ? getUnitsForAge(this.playerAgeIndex + 1) : null,
+      getAllyComposition: () => this.getForceComposition('player'),
+      getEnemyComposition: () => this.getForceComposition('ai'),
       trySpawnUnit: (unitId) => this.trySpawnUnit('player', unitId),
       tryAdvanceAge: () => this.tryAdvanceAge('player'),
       tryUpgradeTurret: () => this.tryUpgradeTurret('player'),
@@ -672,6 +701,55 @@ export class BattleScene extends Phaser.Scene {
     const aiProgress = this.aiBase.x - this.getFrontX('ai');
 
     return side === 'player' ? playerProgress - aiProgress : aiProgress - playerProgress;
+  }
+
+  private getForceComposition(side: Side): {
+    total: number;
+    frontline: number;
+    ranged: number;
+    tank: number;
+    support: number;
+  } {
+    const summary = {
+      total: 0,
+      frontline: 0,
+      ranged: 0,
+      tank: 0,
+      support: 0,
+    };
+
+    for (const unit of this.unitSystem.getAll()) {
+      if (!unit.alive || unit.side !== side) {
+        continue;
+      }
+
+      summary.total += 1;
+      if (unit.def.tags.includes('ranged')) {
+        summary.ranged += 1;
+      }
+      if (
+        unit.def.tags.includes('melee') ||
+        unit.def.tags.includes('tank') ||
+        unit.def.tags.includes('defensive')
+      ) {
+        summary.frontline += 1;
+      }
+      if (unit.def.tags.includes('tank') || unit.def.tags.includes('defensive')) {
+        summary.tank += 1;
+      }
+      if (unit.def.tags.includes('support')) {
+        summary.support += 1;
+      }
+    }
+
+    return summary;
+  }
+
+  private getTurretDps(side: Side, turretLevel: number): number {
+    const ageIndex = side === 'player' ? this.playerAgeIndex : this.aiAgeIndex;
+    const clampedLevel = Math.max(0, Math.min(turretLevel, getTurretMaxLevel(ageIndex)));
+    const weapon = getTurretLevelDefinition(ageIndex, clampedLevel).weapon;
+    return weapon.damage * (1000 / Math.max(1, weapon.cooldownMs));
   }
 
   private syncHudSnapshot(force = false): void {

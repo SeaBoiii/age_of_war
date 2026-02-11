@@ -46,6 +46,27 @@ npm run build
 npm run preview
 ```
 
+## Automated Benchmark Runner
+
+Run repeated AI-vs-AI benchmark simulations from terminal:
+
+```bash
+# default benchmark
+npm run benchmark
+
+# quick run
+npm run benchmark:quick
+
+# custom run
+npm run benchmark -- --matches 200 --seed 42 --duration-sec 300 --start-age 2 --economy-scale 2.2 --verbose
+```
+
+Optional JSON output:
+
+```bash
+npm run benchmark -- --json --out benchmark-results.json
+```
+
 ## GitHub Pages Deployment
 
 The repo includes `.github/workflows/deploy-pages.yml`.
