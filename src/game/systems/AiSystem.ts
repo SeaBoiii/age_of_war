@@ -82,6 +82,14 @@ interface ActionCandidate {
   totalScore: number;
 }
 
+interface AiBehaviorProfile {
+  aggression: number;
+  techFocus: number;
+  defenseFocus: number;
+  holdPreference: number;
+  pressureModeThreshold: number;
+}
+
 const MODE_ACTION_WEIGHTS: Record<StrategyMode, Record<AiActionKind, number>> = {
   defend: {
     advance_age: 65,
@@ -121,6 +129,14 @@ const MODE_ACTION_WEIGHTS: Record<StrategyMode, Record<AiActionKind, number>> = 
   },
 };
 
+const DEFAULT_AI_BEHAVIOR_PROFILE: AiBehaviorProfile = {
+  aggression: 1,
+  techFocus: 1,
+  defenseFocus: 1,
+  holdPreference: 1,
+  pressureModeThreshold: 160,
+};
+
 export class AiSystem {
   private decisionAccumulatorMs = 0;
 
@@ -134,7 +150,17 @@ export class AiSystem {
 
   private readonly recentActions: AiActionKind[] = [];
 
-  public constructor(private readonly context: AiContext) {}
+  private readonly behavior: AiBehaviorProfile;
+
+  public constructor(
+    private readonly context: AiContext,
+    behavior?: Partial<AiBehaviorProfile>,
+  ) {
+    this.behavior = {
+      ...DEFAULT_AI_BEHAVIOR_PROFILE,
+      ...behavior,
+    };
+  }
 
   public reset(): void {
     this.decisionAccumulatorMs = 0;
@@ -211,10 +237,17 @@ export class AiSystem {
   private pickMode(snapshot: TacticalSnapshot): StrategyMode {
     let proposed: StrategyMode = 'stabilize';
 
+    const defendLaneThreshold = -160 - (this.behavior.aggression - 1) * 80;
+    const pressureLaneThreshold = this.behavior.pressureModeThreshold;
+    const canIgnoreLightPressure =
+      this.behavior.aggression > 1.15 &&
+      snapshot.aiBaseHpRatio > 0.58 &&
+      snapshot.laneAdvantage > -200;
+
     if (
-      snapshot.underPressure ||
+      (!canIgnoreLightPressure && snapshot.underPressure) ||
       snapshot.aiBaseHpRatio <= 0.44 ||
-      snapshot.laneAdvantage <= -160 ||
+      snapshot.laneAdvantage <= defendLaneThreshold ||
       snapshot.enemy.frontline > snapshot.ally.frontline + 1
     ) {
       proposed = 'defend';
@@ -226,7 +259,7 @@ export class AiSystem {
     ) {
       proposed = 'tech';
     } else if (
-      snapshot.laneAdvantage >= 160 ||
+      snapshot.laneAdvantage >= pressureLaneThreshold ||
       (snapshot.enemyBaseHpRatio <= 0.6 && snapshot.laneAdvantage >= 60)
     ) {
       proposed = 'pressure';
@@ -440,6 +473,24 @@ export class AiSystem {
       }
 
       score -= candidate.cost * 0.04;
+    }
+
+    if (
+      candidate.kind === 'spawn_frontline' ||
+      candidate.kind === 'spawn_ranged' ||
+      candidate.kind === 'spawn_duo' ||
+      candidate.kind === 'spawn_cheapest'
+    ) {
+      score *= this.behavior.aggression;
+      if (snapshot.laneAdvantage > 20) {
+        score += (this.behavior.aggression - 1) * 20;
+      }
+    } else if (candidate.kind === 'advance_age') {
+      score *= this.behavior.techFocus;
+    } else if (candidate.kind === 'upgrade_turret') {
+      score *= this.behavior.defenseFocus;
+    } else if (candidate.kind === 'hold') {
+      score *= this.behavior.holdPreference;
     }
 
     return score;

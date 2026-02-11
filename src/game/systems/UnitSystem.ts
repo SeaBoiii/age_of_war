@@ -1,6 +1,6 @@
 ﻿import Phaser from 'phaser';
 import { BASE_TOUCH_RANGE, LANE_Y, UNIT_MIN_SPACING } from '../constants/balance';
-import type { UnitDefinition, UnitEntity, UnitId, Side } from '../types';
+import type { AgeId, UnitDefinition, UnitEntity, UnitId, Side } from '../types';
 import { CombatSystem } from './CombatSystem';
 import type { SpawnProjectileOptions } from './ProjectileSystem';
 
@@ -8,6 +8,14 @@ interface DamageUnitModifiers {
   debuffDurationMs?: number;
   debuffAttackSpeedMultiplier?: number;
 }
+
+const RANGED_ENGAGE_DISTANCE_BY_AGE: Record<AgeId, number> = {
+  hearth: UNIT_MIN_SPACING * 2,
+  arcane: UNIT_MIN_SPACING * 2.7,
+  beast: UNIT_MIN_SPACING * 3.4,
+  runeforge: UNIT_MIN_SPACING * 4.1,
+  astral: UNIT_MIN_SPACING * 4.8,
+};
 
 interface UnitSystemContext {
   scene: Phaser.Scene;
@@ -135,12 +143,35 @@ export class UnitSystem {
 
       this.processTraits(unit, deltaMs);
 
-      const target = this.findBestEnemyInRange(unit, this.getEffectiveRange(unit));
+      const effectiveRange = this.getEffectiveRange(unit);
+      const engageRange = this.getEngageRange(unit, effectiveRange);
+      const allyBlocked = this.isBlockedByAlly(unit);
+
+      let target = this.findBestEnemyInRange(unit, engageRange);
+      let enemyBaseInRange = this.isEnemyBaseInRange(unit, engageRange);
+
+      // Allow ranged units to fire over frontline allies when movement is blocked.
+      if (!target && allyBlocked && unit.def.attackType === 'projectile' && !unit.anchored) {
+        target = this.findBestEnemyInRange(unit, effectiveRange);
+        if (!enemyBaseInRange) {
+          enemyBaseInRange = this.isEnemyBaseInRange(unit, effectiveRange);
+        }
+      }
+
       if (target) {
         this.tryAttackUnit(unit, target, now);
-      } else if (this.isEnemyBaseInRange(unit, this.getEffectiveRange(unit))) {
+      } else if (enemyBaseInRange) {
         this.tryAttackBase(unit, now);
-      } else {
+      }
+
+      const rangedMoveAndFire = unit.def.attackType === 'projectile' && !unit.anchored;
+      const shouldAdvanceWhileFiring =
+        rangedMoveAndFire && this.shouldAdvanceWhileFiring(unit, target, engageRange);
+
+      if (shouldAdvanceWhileFiring) {
+        const moveScale = target || enemyBaseInRange ? 0.52 : 1;
+        this.advance(unit, deltaMs, now, moveScale);
+      } else if (!target && !enemyBaseInRange) {
         this.advance(unit, deltaMs, now);
       }
 
@@ -309,7 +340,7 @@ export class UnitSystem {
     attacker.attackCooldownRemainingMs = attacker.def.attackCooldownMs;
   }
 
-  private advance(unit: UnitEntity, deltaMs: number, nowMs: number): void {
+  private advance(unit: UnitEntity, deltaMs: number, nowMs: number, speedScale = 1): void {
     if (unit.anchored) {
       return;
     }
@@ -320,7 +351,8 @@ export class UnitSystem {
 
     const direction = unit.side === 'player' ? 1 : -1;
     const enemyBaseX = this.context.getEnemyBaseX(unit.side);
-    const nextX = unit.x + this.combat.getMoveSpeed(unit, nowMs) * direction * (deltaMs / 1000);
+    const nextX =
+      unit.x + this.combat.getMoveSpeed(unit, nowMs) * speedScale * direction * (deltaMs / 1000);
 
     unit.x =
       direction > 0
@@ -358,6 +390,41 @@ export class UnitSystem {
       })
       .sort((left, right) => Math.abs(left.x - unit.x) - Math.abs(right.x - unit.x))
       .find((enemy) => Math.abs(enemy.x - unit.x) <= range + enemy.def.size * 0.45);
+  }
+
+  private shouldAdvanceWhileFiring(
+    unit: UnitEntity,
+    target: UnitEntity | undefined,
+    engageRange: number,
+  ): boolean {
+    if (!target) {
+      return true;
+    }
+
+    const direction = unit.side === 'player' ? 1 : -1;
+    const directionalDistance = (target.x - unit.x) * direction;
+    const absoluteDistance = Math.abs(target.x - unit.x);
+    const holdDistance = Math.max(UNIT_MIN_SPACING * 1.8, engageRange * 0.72);
+
+    // Keep push pressure for ranged units, but prevent stepping through nearby targets.
+    if (directionalDistance <= UNIT_MIN_SPACING * 1.4) {
+      return false;
+    }
+
+    if (absoluteDistance <= holdDistance) {
+      return false;
+    }
+
+    return true;
+  }
+
+  private getEngageRange(unit: UnitEntity, effectiveRange: number): number {
+    if (unit.def.attackType !== 'projectile' || unit.anchored) {
+      return effectiveRange;
+    }
+
+    const ageRange = RANGED_ENGAGE_DISTANCE_BY_AGE[unit.def.age];
+    return Math.min(effectiveRange, ageRange);
   }
 
   private getEffectiveRange(unit: UnitEntity): number {

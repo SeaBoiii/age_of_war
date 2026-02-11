@@ -151,66 +151,84 @@ export class BattleScene extends Phaser.Scene {
       this.combatSystem,
     );
 
-    this.aiSystem = new AiSystem({
-      getAiAgeIndex: () => this.aiAgeIndex,
-      getEnemyAgeIndex: () => this.playerAgeIndex,
-      getAiGold: () => this.aiGold,
-      getAiIncomePerSecond: () => this.aiIncomePerSecond,
-      isUnderPressure: () => this.getFrontX('player') > this.aiBase.x - 255,
-      getLaneAdvantage: () => this.getLaneAdvantage('ai'),
-      getAiBaseHpRatio: () => this.aiBase.hp / Math.max(1, this.aiBase.maxHp),
-      getEnemyBaseHpRatio: () => this.playerBase.hp / Math.max(1, this.playerBase.maxHp),
-      getAiTurretLevel: () => this.aiBase.turretLevel,
-      getEnemyTurretLevel: () => this.playerBase.turretLevel,
-      getCurrentTurretDps: () => this.getTurretDps('ai', this.aiBase.turretLevel),
-      getNextTurretDps: () =>
-        canUpgradeTurret(this.aiAgeIndex, this.aiBase.turretLevel)
-          ? this.getTurretDps('ai', this.aiBase.turretLevel + 1)
-          : null,
-      getAiAdvanceCost: () => getAgeDefinition(this.aiAgeIndex).advanceCost,
-      canAiAdvance: () => canAdvanceAge(this.aiAgeIndex),
-      getAiTurretUpgradeCost: () => getTurretUpgradeCost(this.aiAgeIndex, this.aiBase.turretLevel),
-      canAiUpgradeTurret: () => canUpgradeTurret(this.aiAgeIndex, this.aiBase.turretLevel),
-      getRoster: () => getUnitsForAge(this.aiAgeIndex),
-      getNextAgeRoster: () => (canAdvanceAge(this.aiAgeIndex) ? getUnitsForAge(this.aiAgeIndex + 1) : null),
-      getAllyComposition: () => this.getForceComposition('ai'),
-      getEnemyComposition: () => this.getForceComposition('player'),
-      trySpawnUnit: (unitId) => this.trySpawnUnit('ai', unitId),
-      tryAdvanceAge: () => this.tryAdvanceAge('ai'),
-      tryUpgradeTurret: () => this.tryUpgradeTurret('ai'),
-      debugLog: (message) => this.debugLog(`AI ${message}`),
-    });
+    this.aiSystem = new AiSystem(
+      {
+        getAiAgeIndex: () => this.aiAgeIndex,
+        getEnemyAgeIndex: () => this.playerAgeIndex,
+        getAiGold: () => this.aiGold,
+        getAiIncomePerSecond: () => this.aiIncomePerSecond,
+        isUnderPressure: () => this.getFrontX('player') > this.aiBase.x - 255,
+        getLaneAdvantage: () => this.getLaneAdvantage('ai'),
+        getAiBaseHpRatio: () => this.aiBase.hp / Math.max(1, this.aiBase.maxHp),
+        getEnemyBaseHpRatio: () => this.playerBase.hp / Math.max(1, this.playerBase.maxHp),
+        getAiTurretLevel: () => this.aiBase.turretLevel,
+        getEnemyTurretLevel: () => this.playerBase.turretLevel,
+        getCurrentTurretDps: () => this.getTurretDps('ai', this.aiBase.turretLevel),
+        getNextTurretDps: () =>
+          canUpgradeTurret(this.aiAgeIndex, this.aiBase.turretLevel)
+            ? this.getTurretDps('ai', this.aiBase.turretLevel + 1)
+            : null,
+        getAiAdvanceCost: () => getAgeDefinition(this.aiAgeIndex).advanceCost,
+        canAiAdvance: () => canAdvanceAge(this.aiAgeIndex),
+        getAiTurretUpgradeCost: () => getTurretUpgradeCost(this.aiAgeIndex, this.aiBase.turretLevel),
+        canAiUpgradeTurret: () => canUpgradeTurret(this.aiAgeIndex, this.aiBase.turretLevel),
+        getRoster: () => getUnitsForAge(this.aiAgeIndex),
+        getNextAgeRoster: () => (canAdvanceAge(this.aiAgeIndex) ? getUnitsForAge(this.aiAgeIndex + 1) : null),
+        getAllyComposition: () => this.getForceComposition('ai'),
+        getEnemyComposition: () => this.getForceComposition('player'),
+        trySpawnUnit: (unitId) => this.trySpawnUnit('ai', unitId),
+        tryAdvanceAge: () => this.tryAdvanceAge('ai'),
+        tryUpgradeTurret: () => this.tryUpgradeTurret('ai'),
+        debugLog: (message) => this.debugLog(`AI ${message}`),
+      },
+      {
+        aggression: 0.95,
+        techFocus: 1,
+        defenseFocus: 1.08,
+        holdPreference: 1.08,
+        pressureModeThreshold: 180,
+      },
+    );
 
-    this.playerAiSystem = new AiSystem({
-      getAiAgeIndex: () => this.playerAgeIndex,
-      getEnemyAgeIndex: () => this.aiAgeIndex,
-      getAiGold: () => this.playerGold,
-      getAiIncomePerSecond: () => this.playerIncomePerSecond,
-      isUnderPressure: () => this.getFrontX('ai') < this.playerBase.x + 255,
-      getLaneAdvantage: () => this.getLaneAdvantage('player'),
-      getAiBaseHpRatio: () => this.playerBase.hp / Math.max(1, this.playerBase.maxHp),
-      getEnemyBaseHpRatio: () => this.aiBase.hp / Math.max(1, this.aiBase.maxHp),
-      getAiTurretLevel: () => this.playerBase.turretLevel,
-      getEnemyTurretLevel: () => this.aiBase.turretLevel,
-      getCurrentTurretDps: () => this.getTurretDps('player', this.playerBase.turretLevel),
-      getNextTurretDps: () =>
-        canUpgradeTurret(this.playerAgeIndex, this.playerBase.turretLevel)
-          ? this.getTurretDps('player', this.playerBase.turretLevel + 1)
-          : null,
-      getAiAdvanceCost: () => getAgeDefinition(this.playerAgeIndex).advanceCost,
-      canAiAdvance: () => canAdvanceAge(this.playerAgeIndex),
-      getAiTurretUpgradeCost: () => getTurretUpgradeCost(this.playerAgeIndex, this.playerBase.turretLevel),
-      canAiUpgradeTurret: () => canUpgradeTurret(this.playerAgeIndex, this.playerBase.turretLevel),
-      getRoster: () => getUnitsForAge(this.playerAgeIndex),
-      getNextAgeRoster: () =>
-        canAdvanceAge(this.playerAgeIndex) ? getUnitsForAge(this.playerAgeIndex + 1) : null,
-      getAllyComposition: () => this.getForceComposition('player'),
-      getEnemyComposition: () => this.getForceComposition('ai'),
-      trySpawnUnit: (unitId) => this.trySpawnUnit('player', unitId),
-      tryAdvanceAge: () => this.tryAdvanceAge('player'),
-      tryUpgradeTurret: () => this.tryUpgradeTurret('player'),
-      debugLog: (message) => this.debugLog(`PLAYER-AI ${message}`),
-    });
+    this.playerAiSystem = new AiSystem(
+      {
+        getAiAgeIndex: () => this.playerAgeIndex,
+        getEnemyAgeIndex: () => this.aiAgeIndex,
+        getAiGold: () => this.playerGold,
+        getAiIncomePerSecond: () => this.playerIncomePerSecond,
+        isUnderPressure: () => this.getFrontX('ai') < this.playerBase.x + 255,
+        getLaneAdvantage: () => this.getLaneAdvantage('player'),
+        getAiBaseHpRatio: () => this.playerBase.hp / Math.max(1, this.playerBase.maxHp),
+        getEnemyBaseHpRatio: () => this.aiBase.hp / Math.max(1, this.aiBase.maxHp),
+        getAiTurretLevel: () => this.playerBase.turretLevel,
+        getEnemyTurretLevel: () => this.aiBase.turretLevel,
+        getCurrentTurretDps: () => this.getTurretDps('player', this.playerBase.turretLevel),
+        getNextTurretDps: () =>
+          canUpgradeTurret(this.playerAgeIndex, this.playerBase.turretLevel)
+            ? this.getTurretDps('player', this.playerBase.turretLevel + 1)
+            : null,
+        getAiAdvanceCost: () => getAgeDefinition(this.playerAgeIndex).advanceCost,
+        canAiAdvance: () => canAdvanceAge(this.playerAgeIndex),
+        getAiTurretUpgradeCost: () => getTurretUpgradeCost(this.playerAgeIndex, this.playerBase.turretLevel),
+        canAiUpgradeTurret: () => canUpgradeTurret(this.playerAgeIndex, this.playerBase.turretLevel),
+        getRoster: () => getUnitsForAge(this.playerAgeIndex),
+        getNextAgeRoster: () =>
+          canAdvanceAge(this.playerAgeIndex) ? getUnitsForAge(this.playerAgeIndex + 1) : null,
+        getAllyComposition: () => this.getForceComposition('player'),
+        getEnemyComposition: () => this.getForceComposition('ai'),
+        trySpawnUnit: (unitId) => this.trySpawnUnit('player', unitId),
+        tryAdvanceAge: () => this.tryAdvanceAge('player'),
+        tryUpgradeTurret: () => this.tryUpgradeTurret('player'),
+        debugLog: (message) => this.debugLog(`PLAYER-AI ${message}`),
+      },
+      {
+        aggression: 1.28,
+        techFocus: 1.08,
+        defenseFocus: 0.82,
+        holdPreference: 0.55,
+        pressureModeThreshold: 100,
+      },
+    );
 
     window.addEventListener(USER_GESTURE_EVENT, this.userGestureListener);
     this.events.once(Phaser.Scenes.Events.DESTROY, this.onSceneDestroy, this);

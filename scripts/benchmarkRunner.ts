@@ -362,42 +362,59 @@ class BenchmarkMatchSimulator {
   private createAiSystem(side: Side): AiSystem {
     const enemy = otherSide(side);
 
-    return new AiSystem({
-      getAiAgeIndex: () => this.sideState[side].ageIndex,
-      getEnemyAgeIndex: () => this.sideState[enemy].ageIndex,
-      getAiGold: () => this.sideState[side].gold,
-      getAiIncomePerSecond: () => this.sideState[side].incomePerSecond,
-      isUnderPressure: () =>
-        side === 'player' ? this.laneAdvantage < -260 : this.laneAdvantage > 260,
-      getLaneAdvantage: () => (side === 'player' ? this.laneAdvantage : -this.laneAdvantage),
-      getAiBaseHpRatio: () =>
-        this.sideState[side].baseHp / Math.max(1, this.sideState[side].maxBaseHp),
-      getEnemyBaseHpRatio: () =>
-        this.sideState[enemy].baseHp / Math.max(1, this.sideState[enemy].maxBaseHp),
-      getAiTurretLevel: () => this.sideState[side].turretLevel,
-      getEnemyTurretLevel: () => this.sideState[enemy].turretLevel,
-      getCurrentTurretDps: () => this.getTurretDps(side, this.sideState[side].turretLevel),
-      getNextTurretDps: () =>
-        canUpgradeTurret(this.sideState[side].ageIndex, this.sideState[side].turretLevel)
-          ? this.getTurretDps(side, this.sideState[side].turretLevel + 1)
-          : null,
-      getAiAdvanceCost: () => getAgeDefinition(this.sideState[side].ageIndex).advanceCost,
-      canAiAdvance: () => canAdvanceAge(this.sideState[side].ageIndex),
-      getAiTurretUpgradeCost: () =>
-        getTurretUpgradeCost(this.sideState[side].ageIndex, this.sideState[side].turretLevel),
-      canAiUpgradeTurret: () =>
-        canUpgradeTurret(this.sideState[side].ageIndex, this.sideState[side].turretLevel),
-      getRoster: () => getUnitsForAge(this.sideState[side].ageIndex),
-      getNextAgeRoster: () =>
-        canAdvanceAge(this.sideState[side].ageIndex)
-          ? getUnitsForAge(this.sideState[side].ageIndex + 1)
-          : null,
-      getAllyComposition: () => this.getForceComposition(side),
-      getEnemyComposition: () => this.getForceComposition(enemy),
-      trySpawnUnit: (unitId) => this.trySpawnUnit(side, unitId),
-      tryAdvanceAge: () => this.tryAdvanceAge(side),
-      tryUpgradeTurret: () => this.tryUpgradeTurret(side),
-    });
+    return new AiSystem(
+      {
+        getAiAgeIndex: () => this.sideState[side].ageIndex,
+        getEnemyAgeIndex: () => this.sideState[enemy].ageIndex,
+        getAiGold: () => this.sideState[side].gold,
+        getAiIncomePerSecond: () => this.sideState[side].incomePerSecond,
+        isUnderPressure: () =>
+          side === 'player' ? this.laneAdvantage < -260 : this.laneAdvantage > 260,
+        getLaneAdvantage: () => (side === 'player' ? this.laneAdvantage : -this.laneAdvantage),
+        getAiBaseHpRatio: () =>
+          this.sideState[side].baseHp / Math.max(1, this.sideState[side].maxBaseHp),
+        getEnemyBaseHpRatio: () =>
+          this.sideState[enemy].baseHp / Math.max(1, this.sideState[enemy].maxBaseHp),
+        getAiTurretLevel: () => this.sideState[side].turretLevel,
+        getEnemyTurretLevel: () => this.sideState[enemy].turretLevel,
+        getCurrentTurretDps: () => this.getTurretDps(side, this.sideState[side].turretLevel),
+        getNextTurretDps: () =>
+          canUpgradeTurret(this.sideState[side].ageIndex, this.sideState[side].turretLevel)
+            ? this.getTurretDps(side, this.sideState[side].turretLevel + 1)
+            : null,
+        getAiAdvanceCost: () => getAgeDefinition(this.sideState[side].ageIndex).advanceCost,
+        canAiAdvance: () => canAdvanceAge(this.sideState[side].ageIndex),
+        getAiTurretUpgradeCost: () =>
+          getTurretUpgradeCost(this.sideState[side].ageIndex, this.sideState[side].turretLevel),
+        canAiUpgradeTurret: () =>
+          canUpgradeTurret(this.sideState[side].ageIndex, this.sideState[side].turretLevel),
+        getRoster: () => getUnitsForAge(this.sideState[side].ageIndex),
+        getNextAgeRoster: () =>
+          canAdvanceAge(this.sideState[side].ageIndex)
+            ? getUnitsForAge(this.sideState[side].ageIndex + 1)
+            : null,
+        getAllyComposition: () => this.getForceComposition(side),
+        getEnemyComposition: () => this.getForceComposition(enemy),
+        trySpawnUnit: (unitId) => this.trySpawnUnit(side, unitId),
+        tryAdvanceAge: () => this.tryAdvanceAge(side),
+        tryUpgradeTurret: () => this.tryUpgradeTurret(side),
+      },
+      side === 'player'
+        ? {
+            aggression: 1.28,
+            techFocus: 1.08,
+            defenseFocus: 0.82,
+            holdPreference: 0.55,
+            pressureModeThreshold: 100,
+          }
+        : {
+            aggression: 0.95,
+            techFocus: 1,
+            defenseFocus: 1.08,
+            holdPreference: 1.08,
+            pressureModeThreshold: 180,
+          },
+    );
   }
 
   private step(deltaMs: number): void {
