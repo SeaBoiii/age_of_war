@@ -1,0 +1,506 @@
+{
+  "meta": {
+    "version": "0.1.0",
+    "goldPerSecond": 10,
+    "killBountyRatio": 0.35,
+    "baseHP": 1200,
+    "laneLengthPx": 1600,
+    "notes": [
+      "DPS is not stored directly; compute as damage * attackRate (ignoring special procs).",
+      "Range: melee units should use ~35-45 even if set to 40 for consistency.",
+      "onHitEffects/onSpawnEffects are data-driven descriptors; implement in your combat resolver."
+    ]
+  },
+  "ages": [
+    {
+      "id": "hearth",
+      "index": 1,
+      "displayName": "Hearth Age",
+      "advanceCost": 0,
+      "baseWeapon": {
+        "id": "ballista",
+        "displayName": "Ballista",
+        "upgradeCost": 250,
+        "hpBonus": 0,
+        "damage": 12,
+        "attackRate": 1.1,
+        "range": 900,
+        "projectileSpeed": 900,
+        "tags": ["baseWeapon", "piercing:0"],
+        "onHitEffects": []
+      },
+      "units": [
+        {
+          "id": "militia_swordsman",
+          "displayName": "Militia Swordsman",
+          "role": "brawler",
+          "cost": 80,
+          "cooldownSec": 3,
+          "hp": 190,
+          "damage": 20,
+          "attackRate": 1.1,
+          "range": 40,
+          "speed": 80,
+          "tags": ["melee", "light"],
+          "onHitEffects": [],
+          "onSpawnEffects": []
+        },
+        {
+          "id": "hedge_archer",
+          "displayName": "Hedge Archer",
+          "role": "ranged",
+          "cost": 110,
+          "cooldownSec": 4,
+          "hp": 120,
+          "damage": 12,
+          "attackRate": 1.5,
+          "range": 240,
+          "speed": 70,
+          "projectile": { "speed": 750, "radius": 3, "pierce": 0, "splashRadius": 0 },
+          "tags": ["ranged", "light"],
+          "onHitEffects": [],
+          "onSpawnEffects": []
+        },
+        {
+          "id": "pike_guard",
+          "displayName": "Pike Guard",
+          "role": "tank",
+          "cost": 130,
+          "cooldownSec": 5,
+          "hp": 300,
+          "damage": 14,
+          "attackRate": 1.1,
+          "range": 45,
+          "speed": 60,
+          "tags": ["melee", "tank", "antiMelee"],
+          "onHitEffects": [],
+          "onSpawnEffects": [
+            {
+              "type": "damageTakenMultiplier",
+              "appliesTo": "self",
+              "sourceTags": ["melee"],
+              "multiplier": 0.9,
+              "durationSec": -1
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "arcane",
+      "index": 2,
+      "displayName": "Arcane Age",
+      "advanceCost": 600,
+      "baseWeapon": {
+        "id": "runed_ballista",
+        "displayName": "Runed Ballista",
+        "upgradeCost": 450,
+        "damage": 18,
+        "attackRate": 1.2,
+        "range": 950,
+        "projectileSpeed": 950,
+        "tags": ["baseWeapon", "piercing:0", "debuff"],
+        "onHitEffects": [
+          {
+            "type": "applyStatus",
+            "statusId": "weaken",
+            "durationSec": 2.5,
+            "params": { "damageMultiplier": 0.9 }
+          }
+        ]
+      },
+      "units": [
+        {
+          "id": "ward_acolyte",
+          "displayName": "Ward Acolyte",
+          "role": "support_tank",
+          "cost": 170,
+          "cooldownSec": 6,
+          "hp": 380,
+          "damage": 10,
+          "attackRate": 1.5,
+          "range": 40,
+          "speed": 60,
+          "tags": ["melee", "support", "tank"],
+          "onHitEffects": [],
+          "onSpawnEffects": [
+            {
+              "type": "grantShield",
+              "targetRule": "nearestAlly",
+              "amount": 70,
+              "durationSec": -1
+            }
+          ]
+        },
+        {
+          "id": "battlemage",
+          "displayName": "Battlemage",
+          "role": "burst_ranged",
+          "cost": 190,
+          "cooldownSec": 7,
+          "hp": 160,
+          "damage": 14,
+          "attackRate": 2.0,
+          "range": 230,
+          "speed": 70,
+          "projectile": { "speed": 850, "radius": 4, "pierce": 0, "splashRadius": 0 },
+          "tags": ["ranged", "magic", "burst"],
+          "onHitEffects": [
+            {
+              "type": "procEveryN",
+              "n": 4,
+              "effect": {
+                "type": "bonusDamageMultiplier",
+                "multiplier": 2.0,
+                "appliesTo": "thisHit"
+              }
+            }
+          ],
+          "onSpawnEffects": []
+        },
+        {
+          "id": "hexer",
+          "displayName": "Hexer",
+          "role": "control",
+          "cost": 220,
+          "cooldownSec": 8,
+          "hp": 170,
+          "damage": 7,
+          "attackRate": 2.0,
+          "range": 260,
+          "speed": 65,
+          "projectile": { "speed": 800, "radius": 4, "pierce": 0, "splashRadius": 0 },
+          "tags": ["ranged", "magic", "control", "debuff"],
+          "onHitEffects": [
+            {
+              "type": "applyStatus",
+              "statusId": "slow",
+              "durationSec": 2.5,
+              "params": { "speedMultiplier": 0.8 }
+            }
+          ],
+          "onSpawnEffects": []
+        }
+      ]
+    },
+    {
+      "id": "beast",
+      "index": 3,
+      "displayName": "Beast Age",
+      "advanceCost": 950,
+      "baseWeapon": {
+        "id": "thunder_harpoon",
+        "displayName": "Thunder Harpoon",
+        "upgradeCost": 700,
+        "damage": 28,
+        "attackRate": 1.0,
+        "range": 1000,
+        "projectileSpeed": 1100,
+        "tags": ["baseWeapon", "knockback"],
+        "onHitEffects": [
+          {
+            "type": "procEveryN",
+            "n": 5,
+            "effect": {
+              "type": "knockback",
+              "distancePx": 40,
+              "excludeTargetTags": ["tank"]
+            }
+          }
+        ]
+      },
+      "units": [
+        {
+          "id": "wolf_rider",
+          "displayName": "Wolf Rider",
+          "role": "charger",
+          "cost": 260,
+          "cooldownSec": 8,
+          "hp": 320,
+          "damage": 16,
+          "attackRate": 1.6,
+          "range": 45,
+          "speed": 110,
+          "tags": ["melee", "fast", "charge"],
+          "onHitEffects": [
+            {
+              "type": "conditionalFirstHitAfter",
+              "condition": { "type": "timeSinceLastAttackAtLeast", "sec": 2.0 },
+              "effect": { "type": "bonusFlatDamage", "amount": 60 }
+            }
+          ],
+          "onSpawnEffects": []
+        },
+        {
+          "id": "treant",
+          "displayName": "Treant",
+          "role": "super_tank",
+          "cost": 320,
+          "cooldownSec": 10,
+          "hp": 720,
+          "damage": 18,
+          "attackRate": 1.0,
+          "range": 45,
+          "speed": 45,
+          "tags": ["melee", "tank", "heavy"],
+          "onHitEffects": [],
+          "onSpawnEffects": [
+            {
+              "type": "damageTakenMultiplier",
+              "appliesTo": "self",
+              "sourceTags": ["ranged"],
+              "multiplier": 0.85,
+              "durationSec": -1
+            }
+          ]
+        },
+        {
+          "id": "wyvern_skirmisher",
+          "displayName": "Wyvern Skirmisher",
+          "role": "ranged_splash",
+          "cost": 340,
+          "cooldownSec": 11,
+          "hp": 260,
+          "damage": 15,
+          "attackRate": 2.0,
+          "range": 250,
+          "speed": 85,
+          "projectile": { "speed": 900, "radius": 5, "pierce": 0, "splashRadius": 45 },
+          "tags": ["ranged", "beast", "splash"],
+          "onHitEffects": [
+            {
+              "type": "splashDamage",
+              "radiusPx": 45,
+              "damage": 10,
+              "falloff": "none"
+            }
+          ],
+          "onSpawnEffects": []
+        }
+      ]
+    },
+    {
+      "id": "runeforge",
+      "index": 4,
+      "displayName": "Runeforge Age",
+      "advanceCost": 1400,
+      "baseWeapon": {
+        "id": "runecannon",
+        "displayName": "Runecannon",
+        "upgradeCost": 1100,
+        "damage": 52,
+        "attackRate": 0.7,
+        "range": 1050,
+        "projectileSpeed": 1200,
+        "tags": ["baseWeapon", "piercing:1"],
+        "onHitEffects": [
+          {
+            "type": "pierce",
+            "count": 1,
+            "damageMultiplierToPierced": 0.5
+          }
+        ]
+      },
+      "units": [
+        {
+          "id": "runic_golem",
+          "displayName": "Runic Golem",
+          "role": "bruiser_tank",
+          "cost": 420,
+          "cooldownSec": 12,
+          "hp": 900,
+          "damage": 20,
+          "attackRate": 1.3,
+          "range": 45,
+          "speed": 40,
+          "tags": ["melee", "tank", "construct"],
+          "onHitEffects": [],
+          "onSpawnEffects": [
+            {
+              "type": "statusImmunity",
+              "appliesTo": "self",
+              "statusIds": ["slow", "weaken"],
+              "durationSec": -1
+            }
+          ]
+        },
+        {
+          "id": "rune_gunner",
+          "displayName": "Rune Gunner",
+          "role": "piercing_ranged",
+          "cost": 460,
+          "cooldownSec": 12,
+          "hp": 280,
+          "damage": 19,
+          "attackRate": 2.0,
+          "range": 280,
+          "speed": 65,
+          "projectile": { "speed": 1050, "radius": 4, "pierce": 2, "splashRadius": 0 },
+          "tags": ["ranged", "piercing"],
+          "onHitEffects": [
+            {
+              "type": "pierce",
+              "count": 2,
+              "damageMultiplierToPierced": 0.6
+            }
+          ],
+          "onSpawnEffects": []
+        },
+        {
+          "id": "siege_artificer",
+          "displayName": "Siege Artificer",
+          "role": "summoner",
+          "cost": 520,
+          "cooldownSec": 14,
+          "hp": 240,
+          "damage": 9,
+          "attackRate": 2.0,
+          "range": 300,
+          "speed": 60,
+          "projectile": { "speed": 900, "radius": 4, "pierce": 0, "splashRadius": 0 },
+          "tags": ["ranged", "support", "deployable"],
+          "onHitEffects": [],
+          "onSpawnEffects": [
+            {
+              "type": "spawnUnit",
+              "unitRef": "sentry_totem",
+              "spawnRule": "nearSelfBehind",
+              "maxSimultaneous": 1,
+              "durationSec": 12
+            }
+          ]
+        },
+        {
+          "id": "sentry_totem",
+          "displayName": "Sentry Totem",
+          "role": "deployable_turret",
+          "cost": 0,
+          "cooldownSec": 0,
+          "hp": 220,
+          "damage": 14,
+          "attackRate": 2.0,
+          "range": 320,
+          "speed": 0,
+          "projectile": { "speed": 1100, "radius": 3, "pierce": 0, "splashRadius": 0 },
+          "tags": ["deployable", "turret", "stationary"],
+          "onHitEffects": [],
+          "onSpawnEffects": [
+            { "type": "lifetime", "durationSec": 12 }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "astral",
+      "index": 5,
+      "displayName": "Astral Age",
+      "advanceCost": 2100,
+      "baseWeapon": {
+        "id": "starfall_prism",
+        "displayName": "Starfall Prism",
+        "upgradeCost": 1700,
+        "damage": 85,
+        "attackRate": 0.6,
+        "range": 1100,
+        "projectileSpeed": 1400,
+        "tags": ["baseWeapon", "aoe"],
+        "onHitEffects": [
+          {
+            "type": "procEveryN",
+            "n": 6,
+            "effect": {
+              "type": "aoeDamage",
+              "radiusPx": 70,
+              "damage": 60,
+              "falloff": "none"
+            }
+          }
+        ]
+      },
+      "units": [
+        {
+          "id": "portal_knight",
+          "displayName": "Portal Knight",
+          "role": "blink_frontline",
+          "cost": 650,
+          "cooldownSec": 16,
+          "hp": 820,
+          "damage": 21,
+          "attackRate": 2.0,
+          "range": 45,
+          "speed": 85,
+          "tags": ["melee", "tank", "mobility"],
+          "onHitEffects": [],
+          "onSpawnEffects": [
+            {
+              "type": "oncePerLifeTrigger",
+              "trigger": { "type": "hpBelowPercent", "percent": 60 },
+              "effect": [
+                { "type": "blinkForward", "distancePx": 220 },
+                { "type": "cleanseStatuses", "statusIds": ["slow", "weaken"] }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "starcaller",
+          "displayName": "Starcaller",
+          "role": "artillery_aoe",
+          "cost": 720,
+          "cooldownSec": 18,
+          "hp": 360,
+          "damage": 55,
+          "attackRate": 1.0,
+          "range": 420,
+          "speed": 55,
+          "projectile": { "speed": 500, "radius": 6, "pierce": 0, "splashRadius": 85 },
+          "tags": ["ranged", "magic", "artillery", "splash"],
+          "onHitEffects": [
+            {
+              "type": "splashDamage",
+              "radiusPx": 85,
+              "damage": 35,
+              "falloff": "linear"
+            }
+          ],
+          "onSpawnEffects": []
+        },
+        {
+          "id": "void_reaper",
+          "displayName": "Void Reaper",
+          "role": "execute_melee",
+          "cost": 780,
+          "cooldownSec": 20,
+          "hp": 640,
+          "damage": 30,
+          "attackRate": 2.0,
+          "range": 45,
+          "speed": 90,
+          "tags": ["melee", "assassin", "execute"],
+          "onHitEffects": [
+            {
+              "type": "conditionalDamageMultiplier",
+              "condition": { "type": "targetHpBelowPercent", "percent": 35 },
+              "multiplier": 1.4
+            }
+          ],
+          "onSpawnEffects": []
+        }
+      ]
+    }
+  ],
+  "statusEffects": [
+    {
+      "id": "slow",
+      "displayName": "Slow",
+      "stacking": "refresh",
+      "params": { "speedMultiplier": 0.8 }
+    },
+    {
+      "id": "weaken",
+      "displayName": "Weaken",
+      "stacking": "refresh",
+      "params": { "damageMultiplier": 0.9 }
+    }
+  ]
+}

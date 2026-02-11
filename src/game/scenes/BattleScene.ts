@@ -394,6 +394,8 @@ export class BattleScene extends Phaser.Scene {
       speed: weapon.projectileSpeed,
       radius: 5,
       color: weapon.color,
+      debuffDurationMs: weapon.debuffDurationMs,
+      debuffAttackSpeedMultiplier: weapon.debuffAttackSpeedMultiplier,
       targetBase: false,
     });
 

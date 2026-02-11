@@ -103,11 +103,15 @@ src/
 
 ## Extending Units
 
-Unit definitions are data-driven in:
+Primary balance/content config is now JSON-driven:
 
-- `src/game/constants/units.ts`
+- `src/game/config/gameConfig.json`
 
-Add/update units there (cost/stats/traits/projectile), then include unit IDs in each age config in `src/game/constants/ages.ts`.
+Runtime resolution and effect mapping lives in:
+
+- `src/game/config/resolveConfig.ts`
+
+This resolver maps the JSON schema into game runtime values (ages, rosters, turret tiers, economy, unit stats), and translates supported effect descriptors into current combat traits.
 
 ## Persistence
 

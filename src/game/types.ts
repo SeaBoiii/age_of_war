@@ -22,6 +22,8 @@ export interface BaseWeapon {
   range: number;
   projectileSpeed: number;
   color: number;
+  debuffDurationMs?: number;
+  debuffAttackSpeedMultiplier?: number;
 }
 
 export interface TurretLevelDefinition {
