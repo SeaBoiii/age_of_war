@@ -31,18 +31,21 @@ export function GameShell() {
   }, [state.mode]);
 
   return (
-    <div className="relative mx-auto w-full max-w-6xl overflow-hidden rounded-2xl border border-white/20 bg-slate-900/80 shadow-2xl">
-      <div className="aspect-[16/9] w-full">
-        <PhaserViewport />
+    <div className="mx-auto w-full max-w-6xl">
+      <div className="relative overflow-hidden rounded-2xl border border-white/20 bg-slate-900/80 shadow-2xl">
+        <div className="aspect-[16/9] w-full">
+          <PhaserViewport />
+        </div>
+
+        {state.mode === 'playing' && <GameHud state={state} />}
+        {state.mode === 'playing' && !state.debugAiVsAi && <ActionBar state={state} />}
+        {state.mode === 'start' && <StartScreen state={state} />}
+        {state.mode === 'ended' && <EndScreen state={state} />}
+
+        {state.mode === 'playing' && state.paused && <PauseMenu state={state} />}
       </div>
 
-      {state.mode === 'playing' && <GameHud state={state} />}
-      {state.mode === 'playing' && !state.debugAiVsAi && <ActionBar state={state} />}
       {import.meta.env.DEV && state.mode === 'playing' && <DebugConsole state={state} />}
-      {state.mode === 'start' && <StartScreen state={state} />}
-      {state.mode === 'ended' && <EndScreen state={state} />}
-
-      {state.mode === 'playing' && state.paused && <PauseMenu state={state} />}
     </div>
   );
 }

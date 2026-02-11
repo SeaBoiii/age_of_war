@@ -5,6 +5,7 @@ interface AiContext {
   getAiAgeIndex: () => number;
   getAiGold: () => number;
   isUnderPressure: () => boolean;
+  getLaneAdvantage: () => number;
   getAiAdvanceCost: () => number | null;
   canAiAdvance: () => boolean;
   getAiTurretUpgradeCost: () => number | null;
@@ -23,12 +24,15 @@ export class AiSystem {
 
   private saveForAgeDecisions = 0;
 
+  private lastSpawnRole: 'frontline' | 'ranged' | null = null;
+
   public constructor(private readonly context: AiContext) {}
 
   public reset(): void {
     this.decisionAccumulatorMs = 0;
     this.decisionCount = 0;
     this.saveForAgeDecisions = 0;
+    this.lastSpawnRole = null;
   }
 
   public update(deltaMs: number): void {
@@ -44,9 +48,20 @@ export class AiSystem {
     this.context.debugLog?.(message);
   }
 
+  private trySpawnWithTrace(unit: UnitDefinition, role: 'frontline' | 'ranged'): boolean {
+    if (this.context.trySpawnUnit(unit.id)) {
+      this.lastSpawnRole = role;
+      this.debug(`action: spawned ${unit.name}`);
+      return true;
+    }
+
+    this.debug(`action-failed: could not spawn ${unit.name}`);
+    return false;
+  }
+
   private makeDecision(): void {
     this.decisionCount += 1;
-    if (this.decisionCount % 8 === 0) {
+    if (this.decisionCount % 7 === 0) {
       this.saveForAgeDecisions = 4;
     } else {
       this.saveForAgeDecisions = Math.max(0, this.saveForAgeDecisions - 1);
@@ -56,51 +71,86 @@ export class AiSystem {
     const meleeUnits = roster.filter((unit) => unit.tags.includes('melee'));
     const rangedUnits = roster.filter((unit) => unit.tags.includes('ranged'));
 
-    const defensiveMelee = [...meleeUnits].sort((left, right) => right.maxHp - left.maxHp)[0];
+    const tankFrontliner = [...meleeUnits]
+      .filter((unit) => unit.tags.includes('tank') || unit.tags.includes('defensive'))
+      .sort((left, right) => right.maxHp - left.maxHp)[0];
+
+    const strongestMelee = [...meleeUnits].sort((left, right) => right.maxHp - left.maxHp)[0];
+    const frontliner = tankFrontliner ?? strongestMelee;
+
     const cheapMelee = [...meleeUnits].sort((left, right) => left.cost - right.cost)[0];
     const strongRanged = [...rangedUnits].sort((left, right) => right.damage - left.damage)[0];
+    const cheapRanged = [...rangedUnits].sort((left, right) => left.cost - right.cost)[0];
 
     const aiGold = this.context.getAiGold();
+    const laneAdvantage = this.context.getLaneAdvantage();
     const underPressure = this.context.isUnderPressure();
 
+    const winning = laneAdvantage > 110;
+    const dominant = laneAdvantage > 240;
+    const losing = laneAdvantage < -110;
+    const collapsing = underPressure || laneAdvantage < -240;
+
     this.debug(
-      `decision#${this.decisionCount} gold=${Math.floor(aiGold)} pressure=${underPressure ? 'high' : 'low'} saveAge=${this.saveForAgeDecisions}`,
+      `decision#${this.decisionCount} age=${this.context.getAiAgeIndex() + 1} gold=${Math.floor(
+        aiGold,
+      )} laneAdv=${Math.floor(laneAdvantage)} pressure=${underPressure ? 'high' : 'low'}`,
     );
 
-    if (underPressure && defensiveMelee) {
-      this.debug(`plan: defend base with ${defensiveMelee.name}`);
-      if (this.context.trySpawnUnit(defensiveMelee.id)) {
-        this.debug(`action: spawned ${defensiveMelee.name}`);
+    // Emergency defense: if we may lose lane, drop frontline immediately.
+    if (collapsing && frontliner) {
+      this.debug(`plan: emergency frontline ${frontliner.name}`);
+      if (this.trySpawnWithTrace(frontliner, 'frontline')) {
         return;
       }
-      this.debug(`action-failed: could not spawn ${defensiveMelee.name}`);
     }
 
     const advanceCost = this.context.getAiAdvanceCost();
-    if (
-      this.context.canAiAdvance() &&
-      advanceCost !== null &&
-      aiGold >= advanceCost &&
-      (this.saveForAgeDecisions > 0 || aiGold >= advanceCost * 1.25 || this.decisionCount % 3 === 0)
-    ) {
-      this.debug(`plan: advance age (cost ${Math.floor(advanceCost)})`);
-      if (this.context.tryAdvanceAge()) {
-        this.debug('action: advanced to next age');
-        return;
+    const canAdvance = this.context.canAiAdvance() && advanceCost !== null;
+
+    // Prioritize age progression because newer units are stronger.
+    if (canAdvance && advanceCost !== null && aiGold >= advanceCost) {
+      const shouldAdvanceNow =
+        !collapsing &&
+        (
+          dominant ||
+          winning ||
+          this.saveForAgeDecisions > 0 ||
+          this.decisionCount % 2 === 0 ||
+          aiGold >= advanceCost * 1.18
+        );
+
+      if (shouldAdvanceNow) {
+        this.debug(`plan: advance age (cost ${Math.floor(advanceCost)})`);
+        if (this.context.tryAdvanceAge()) {
+          this.debug('action: advanced to next age');
+          return;
+        }
+        this.debug('action-failed: age advance blocked');
       }
-      this.debug('action-failed: age advance blocked');
+    }
+
+    // If winning and close to age-up, spend less on units and save.
+    if (
+      canAdvance &&
+      advanceCost !== null &&
+      aiGold < advanceCost &&
+      winning &&
+      aiGold >= advanceCost * 0.65 &&
+      !collapsing
+    ) {
+      this.debug(`plan: hold gold for age (${Math.floor(aiGold)}/${Math.floor(advanceCost)})`);
+      return;
     }
 
     const turretUpgradeCost = this.context.getAiTurretUpgradeCost();
+
+    // When not winning, focus tower progression for defensive stability.
     if (
       this.context.canAiUpgradeTurret() &&
       turretUpgradeCost !== null &&
       aiGold >= turretUpgradeCost &&
-      (
-        underPressure ||
-        aiGold >= turretUpgradeCost * 1.7 ||
-        (this.decisionCount % 4 === 0 && aiGold >= turretUpgradeCost * 1.1)
-      )
+      (!winning || collapsing || this.decisionCount % 3 === 0)
     ) {
       this.debug(`plan: upgrade turret (cost ${Math.floor(turretUpgradeCost)})`);
       if (this.context.tryUpgradeTurret()) {
@@ -110,38 +160,39 @@ export class AiSystem {
       this.debug('action-failed: turret upgrade blocked');
     }
 
-    if (
-      this.saveForAgeDecisions > 0 &&
-      this.context.canAiAdvance() &&
-      advanceCost !== null &&
-      aiGold < advanceCost
-    ) {
-      this.debug(`plan: hold gold for age advance (${Math.floor(aiGold)}/${Math.floor(advanceCost)})`);
-      return;
-    }
+    // Build formations: frontline first, then ranged support behind it.
+    if (frontliner && strongRanged) {
+      const shouldLeadWithFrontline =
+        this.lastSpawnRole !== 'frontline' || collapsing || losing || this.decisionCount % 4 === 0;
 
-    const cheapestCost = Math.min(...roster.map((unit) => unit.cost));
-    if (aiGold >= cheapestCost * 2.2 && strongRanged) {
-      this.debug(`plan: pressure with ranged ${strongRanged.name}`);
-      const spawnedRanged = this.context.trySpawnUnit(strongRanged.id);
-      if (spawnedRanged && this.decisionCount % 2 === 0 && cheapMelee) {
-        this.context.trySpawnUnit(cheapMelee.id);
-        this.debug(`action: chained melee spawn ${cheapMelee.name}`);
+      if (shouldLeadWithFrontline) {
+        this.debug(`plan: frontline ${frontliner.name} then ranged ${strongRanged.name}`);
+        if (this.trySpawnWithTrace(frontliner, 'frontline')) {
+          const refreshedGold = this.context.getAiGold();
+          if (!collapsing && refreshedGold >= strongRanged.cost * 1.1) {
+            this.debug(`plan: follow-up ranged ${strongRanged.name}`);
+            this.trySpawnWithTrace(strongRanged, 'ranged');
+          }
+          return;
+        }
       }
-      if (spawnedRanged) {
-        this.debug(`action: spawned ${strongRanged.name}`);
+
+      this.debug(`plan: support with ranged ${strongRanged.name}`);
+      if (this.trySpawnWithTrace(strongRanged, 'ranged')) {
         return;
       }
-      this.debug(`action-failed: could not spawn ${strongRanged.name}`);
     }
 
-    if (cheapMelee) {
-      this.debug(`plan: spawn cheapest melee ${cheapMelee.name}`);
-      if (this.context.trySpawnUnit(cheapMelee.id)) {
-        this.debug(`action: spawned ${cheapMelee.name}`);
-      } else {
-        this.debug(`action-failed: could not spawn ${cheapMelee.name}`);
+    if (cheapMelee && this.context.getAiGold() >= cheapMelee.cost) {
+      this.debug(`plan: fallback melee ${cheapMelee.name}`);
+      if (this.trySpawnWithTrace(cheapMelee, 'frontline')) {
+        return;
       }
+    }
+
+    if (cheapRanged && this.context.getAiGold() >= cheapRanged.cost) {
+      this.debug(`plan: fallback ranged ${cheapRanged.name}`);
+      this.trySpawnWithTrace(cheapRanged, 'ranged');
     }
   }
 }

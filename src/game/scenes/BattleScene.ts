@@ -155,6 +155,7 @@ export class BattleScene extends Phaser.Scene {
       getAiAgeIndex: () => this.aiAgeIndex,
       getAiGold: () => this.aiGold,
       isUnderPressure: () => this.getFrontX('player') > this.aiBase.x - 255,
+      getLaneAdvantage: () => this.getLaneAdvantage('ai'),
       getAiAdvanceCost: () => getAgeDefinition(this.aiAgeIndex).advanceCost,
       canAiAdvance: () => canAdvanceAge(this.aiAgeIndex),
       getAiTurretUpgradeCost: () => getTurretUpgradeCost(this.aiAgeIndex, this.aiBase.turretLevel),
@@ -170,6 +171,7 @@ export class BattleScene extends Phaser.Scene {
       getAiAgeIndex: () => this.playerAgeIndex,
       getAiGold: () => this.playerGold,
       isUnderPressure: () => this.getFrontX('ai') < this.playerBase.x + 255,
+      getLaneAdvantage: () => this.getLaneAdvantage('player'),
       getAiAdvanceCost: () => getAgeDefinition(this.playerAgeIndex).advanceCost,
       canAiAdvance: () => canAdvanceAge(this.playerAgeIndex),
       getAiTurretUpgradeCost: () => getTurretUpgradeCost(this.playerAgeIndex, this.playerBase.turretLevel),
@@ -663,6 +665,13 @@ export class BattleScene extends Phaser.Scene {
     }
 
     return side === 'player' ? Math.max(...aliveUnits) : Math.min(...aliveUnits);
+  }
+
+  private getLaneAdvantage(side: Side): number {
+    const playerProgress = this.getFrontX('player') - this.playerBase.x;
+    const aiProgress = this.aiBase.x - this.getFrontX('ai');
+
+    return side === 'player' ? playerProgress - aiProgress : aiProgress - playerProgress;
   }
 
   private syncHudSnapshot(force = false): void {
