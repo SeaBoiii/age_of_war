@@ -20,6 +20,7 @@ import type { Side, UnitDefinition, UnitId } from '../src/game/types';
 
 type Winner = Side | 'draw';
 type Role = 'frontline' | 'ranged';
+const BENCH_MAX_SPAWN_QUEUE = 5;
 
 interface BenchmarkOptions {
   matches: number;
@@ -50,7 +51,12 @@ interface SideState {
   baseHp: number;
   maxBaseHp: number;
   turretLevel: number;
-  cooldowns: Map<UnitId, number>;
+  spawnQueue: Array<{
+    unitId: UnitId;
+    unit: UnitDefinition;
+    spawnRateMs: number;
+  }>;
+  queueCooldownMs: number;
   metrics: SideMetrics;
 }
 
@@ -68,6 +74,7 @@ interface SimUnit {
   role: Role;
   isTank: boolean;
   isSupport: boolean;
+  cost: number;
   hp: number;
   maxHp: number;
   dps: number;
@@ -342,19 +349,15 @@ class BenchmarkMatchSimulator {
       BASE_PASSIVE_INCOME_PER_SECOND +
       (side === 'ai' ? age.economy.aiIncomeBonus : age.economy.playerIncomeBonus);
 
-    const cooldowns = new Map<UnitId, number>();
-    for (const unit of getUnitsForAge(ageIndex)) {
-      cooldowns.set(unit.id, 0);
-    }
-
     return {
       ageIndex,
       gold: startGold * this.options.economyScale,
-      incomePerSecond: incomePerSecond * this.options.economyScale,
+      incomePerSecond: side === 'ai' ? incomePerSecond * this.options.economyScale : 0,
       baseHp: maxBaseHp,
       maxBaseHp,
       turretLevel: 0,
-      cooldowns,
+      spawnQueue: [],
+      queueCooldownMs: 0,
       metrics: makeEmptyMetrics(),
     };
   }
@@ -419,11 +422,11 @@ class BenchmarkMatchSimulator {
 
   private step(deltaMs: number): void {
     this.elapsedMs += deltaMs;
-    this.tickCooldowns(deltaMs);
     this.tickIncome(deltaMs);
 
     this.aiSystems.player.update(deltaMs);
     this.aiSystems.ai.update(deltaMs);
+    this.processSpawnQueues(deltaMs);
 
     this.resolveEngagement(deltaMs);
     this.resolveLane(deltaMs);
@@ -431,20 +434,10 @@ class BenchmarkMatchSimulator {
     this.cleanupUnits();
   }
 
-  private tickCooldowns(deltaMs: number): void {
-    for (const side of ['player', 'ai'] as const) {
-      const cooldowns = this.sideState[side].cooldowns;
-      for (const [unitId, remaining] of cooldowns.entries()) {
-        cooldowns.set(unitId, Math.max(0, remaining - deltaMs));
-      }
-    }
-  }
-
   private tickIncome(deltaMs: number): void {
     this.incomeAccumulatorMs += deltaMs;
 
     while (this.incomeAccumulatorMs >= 1000) {
-      this.sideState.player.gold += this.sideState.player.incomePerSecond;
       this.sideState.ai.gold += this.sideState.ai.incomePerSecond;
       this.incomeAccumulatorMs -= 1000;
     }
@@ -466,8 +459,7 @@ class BenchmarkMatchSimulator {
       return false;
     }
 
-    const activeUnits = this.units.filter((entry) => entry.side === side && entry.hp > 0).length;
-    if (activeUnits >= 5) {
+    if (state.spawnQueue.length >= BENCH_MAX_SPAWN_QUEUE) {
       return false;
     }
 
@@ -475,18 +467,41 @@ class BenchmarkMatchSimulator {
       return false;
     }
 
-    const remainingCooldown = state.cooldowns.get(unit.id) ?? 0;
-    if (remainingCooldown > 0) {
-      return false;
-    }
-
     state.gold -= unit.cost;
     state.metrics.goldSpent += unit.cost;
-    state.metrics.spawns += 1;
-    state.cooldowns.set(unit.id, unit.cooldownMs);
-
-    this.units.push(this.createSimUnit(side, unit));
+    state.spawnQueue.push({
+      unitId: unit.id,
+      unit,
+      spawnRateMs: unit.cooldownMs,
+    });
     return true;
+  }
+
+  private processSpawnQueues(deltaMs: number): void {
+    this.sideState.player.queueCooldownMs = this.processSideSpawnQueue('player', deltaMs);
+    this.sideState.ai.queueCooldownMs = this.processSideSpawnQueue('ai', deltaMs);
+  }
+
+  private processSideSpawnQueue(side: Side, deltaMs: number): number {
+    const state = this.sideState[side];
+    let nextCooldownMs = Math.max(0, state.queueCooldownMs - deltaMs);
+
+    while (state.spawnQueue.length > 0 && nextCooldownMs <= 0) {
+      const entry = state.spawnQueue.shift();
+      if (!entry) {
+        break;
+      }
+
+      this.units.push(this.createSimUnit(side, entry.unit));
+      state.metrics.spawns += 1;
+      nextCooldownMs += entry.spawnRateMs;
+    }
+
+    if (state.spawnQueue.length === 0 && nextCooldownMs < 0) {
+      nextCooldownMs = 0;
+    }
+
+    return nextCooldownMs;
   }
 
   private createSimUnit(side: Side, unit: UnitDefinition): SimUnit {
@@ -516,6 +531,7 @@ class BenchmarkMatchSimulator {
       role,
       isTank,
       isSupport,
+      cost: unit.cost,
       hp,
       maxHp: hp,
       dps: Math.max(1, dps),
@@ -542,11 +558,6 @@ class BenchmarkMatchSimulator {
     state.turretLevel = 0;
 
     this.refreshIncome(side);
-    for (const unit of getUnitsForAge(state.ageIndex)) {
-      if (!state.cooldowns.has(unit.id)) {
-        state.cooldowns.set(unit.id, 0);
-      }
-    }
 
     this.laneAdvantage += side === 'player' ? 24 : -24;
     return true;
@@ -572,9 +583,9 @@ class BenchmarkMatchSimulator {
     const age = getAgeDefinition(state.ageIndex);
 
     state.incomePerSecond =
-      (BASE_PASSIVE_INCOME_PER_SECOND +
-        (side === 'ai' ? age.economy.aiIncomeBonus : age.economy.playerIncomeBonus)) *
-      this.options.economyScale;
+      side === 'ai'
+        ? (BASE_PASSIVE_INCOME_PER_SECOND + age.economy.aiIncomeBonus) * this.options.economyScale
+        : 0;
   }
 
   private getForceComposition(side: Side): ForceComposition {
@@ -672,7 +683,11 @@ class BenchmarkMatchSimulator {
       const hpBefore = target.hp;
       target.hp -= damagePerTarget * mitigation;
       if (hpBefore > 0 && target.hp <= 0) {
-        this.sideState[attacker].gold += target.bounty;
+        if (attacker === 'player') {
+          this.sideState.player.gold += Math.ceil(target.cost * 1.3);
+        } else {
+          this.sideState.ai.gold += target.bounty;
+        }
       }
     }
   }

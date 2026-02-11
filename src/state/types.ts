@@ -36,6 +36,10 @@ export interface GameUiState {
   playerTurretUpgradeCost: number | null;
   aiTurretLevel: number;
   aiTurretMaxLevel: number;
+  playerQueueCount: number;
+  playerQueueLimit: number;
+  aiQueueCount: number;
+  aiQueueLimit: number;
   canAdvanceAge: boolean;
   advanceAgeCost: number | null;
   unitButtons: UnitButtonState[];
@@ -72,6 +76,10 @@ export interface BattleSnapshot {
   playerTurretUpgradeCost: number | null;
   aiTurretLevel: number;
   aiTurretMaxLevel: number;
+  playerQueueCount: number;
+  playerQueueLimit: number;
+  aiQueueCount: number;
+  aiQueueLimit: number;
   canAdvanceAge: boolean;
   advanceAgeCost: number | null;
   unitButtons: UnitButtonState[];

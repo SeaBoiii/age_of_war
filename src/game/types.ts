@@ -164,8 +164,8 @@ export interface UnitButtonState {
   name: string;
   icon: string;
   cost: number;
-  cooldownMs: number;
-  cooldownRemainingMs: number;
+  spawnRateMs: number;
+  queuedCount: number;
 }
 
 export type UnitId =

@@ -22,7 +22,7 @@ import {
   WORLD_WIDTH,
 } from '../constants/balance';
 import { getUnitDefinition, getUnitsForAge } from '../constants/units';
-import type { BaseState, Side, UnitButtonState, UnitEntity, UnitId } from '../types';
+import type { BaseState, Side, UnitButtonState, UnitDefinition, UnitEntity, UnitId } from '../types';
 import { GameBridge } from '../../state/gameBridge';
 import type { GameCommand } from '../../state/types';
 import { USER_GESTURE_EVENT } from '../../state/interactionEvents';
@@ -34,6 +34,14 @@ import { UnitSystem } from '../systems/UnitSystem';
 const BGM_KEY = 'bgm_glorious_morning';
 const TURRET_TURN_SPEED_RAD_PER_SECOND = 4.8;
 const DEBUG_ENABLED = import.meta.env.DEV;
+const MAX_SPAWN_QUEUE = 5;
+const PLAYER_KILL_BOUNTY_MULTIPLIER = 1.3;
+
+interface SpawnQueueEntry {
+  unitId: UnitId;
+  unit: UnitDefinition;
+  spawnRateMs: number;
+}
 
 export class BattleScene extends Phaser.Scene {
   private readonly bridge: GameBridge;
@@ -60,15 +68,17 @@ export class BattleScene extends Phaser.Scene {
 
   private aiIncomePerSecond = BASE_PASSIVE_INCOME_PER_SECOND;
 
-  private playerIncomeMetaBonus = 0;
-
   private playerAgeIndex = 0;
 
   private aiAgeIndex = 0;
 
-  private playerCooldowns = new Map<UnitId, number>();
+  private playerSpawnQueue: SpawnQueueEntry[] = [];
 
-  private aiCooldowns = new Map<UnitId, number>();
+  private aiSpawnQueue: SpawnQueueEntry[] = [];
+
+  private playerQueueCooldownMs = 0;
+
+  private aiQueueCooldownMs = 0;
 
   private fixedAccumulatorMs = 0;
 
@@ -285,10 +295,12 @@ export class BattleScene extends Phaser.Scene {
           break;
         }
 
-        const spawned = this.trySpawnUnit('player', command.unitId);
-        if (!spawned) {
-          this.battleMessage = 'Cannot deploy that unit right now.';
+        const queueResult = this.queueUnit('player', command.unitId);
+        if (queueResult !== 'queued') {
+          this.battleMessage = this.getQueueFailureMessage(queueResult);
           this.syncHudSnapshot(true);
+        } else {
+          this.syncHudSnapshot();
         }
         break;
       }
@@ -359,19 +371,12 @@ export class BattleScene extends Phaser.Scene {
     this.playerGold = PLAYER_GOLD_ON_START + startAge.economy.playerStartGoldBonus;
     this.aiGold = AI_GOLD_ON_START + startAge.economy.aiStartGoldBonus;
 
-    // Meta upgrades are currently KIV in UI, so keep match economy neutral.
-    this.playerIncomeMetaBonus = 0;
     this.refreshIncomeRates();
 
-    this.playerCooldowns = new Map<UnitId, number>();
-    this.aiCooldowns = new Map<UnitId, number>();
-
-    for (const unit of getUnitsForAge(this.playerAgeIndex)) {
-      this.playerCooldowns.set(unit.id, 0);
-    }
-    for (const unit of getUnitsForAge(this.aiAgeIndex)) {
-      this.aiCooldowns.set(unit.id, 0);
-    }
+    this.playerSpawnQueue = [];
+    this.aiSpawnQueue = [];
+    this.playerQueueCooldownMs = 0;
+    this.aiQueueCooldownMs = 0;
 
     this.playerBase.turretLevel = 0;
     this.aiBase.turretLevel = 0;
@@ -406,12 +411,8 @@ export class BattleScene extends Phaser.Scene {
       this.debugLog(`mode-changed ${aiVsAiMode ? 'AI vs AI enabled' : 'AI vs AI disabled'}`);
     }
 
-    this.tickCooldowns(this.playerCooldowns, deltaMs);
-    this.tickCooldowns(this.aiCooldowns, deltaMs);
-
     this.incomeAccumulatorMs += deltaMs;
     while (this.incomeAccumulatorMs >= PASSIVE_INCOME_TICK_MS) {
-      this.playerGold += this.playerIncomePerSecond;
       this.aiGold += this.aiIncomePerSecond;
       this.incomeAccumulatorMs -= PASSIVE_INCOME_TICK_MS;
     }
@@ -420,6 +421,7 @@ export class BattleScene extends Phaser.Scene {
       this.playerAiSystem.update(deltaMs);
     }
     this.aiSystem.update(deltaMs);
+    this.processSpawnQueues(deltaMs);
     this.unitSystem.update(deltaMs);
     this.projectileSystem.update(deltaMs);
     this.updateBaseAttacks(deltaMs);
@@ -435,13 +437,9 @@ export class BattleScene extends Phaser.Scene {
   }
 
   private refreshIncomeRates(): void {
-    const playerAge = getAgeDefinition(this.playerAgeIndex);
     const aiAge = getAgeDefinition(this.aiAgeIndex);
 
-    this.playerIncomePerSecond =
-      BASE_PASSIVE_INCOME_PER_SECOND +
-      this.playerIncomeMetaBonus +
-      playerAge.economy.playerIncomeBonus;
+    this.playerIncomePerSecond = 0;
 
     this.aiIncomePerSecond = BASE_PASSIVE_INCOME_PER_SECOND + aiAge.economy.aiIncomeBonus;
   }
@@ -498,23 +496,29 @@ export class BattleScene extends Phaser.Scene {
   }
 
   private trySpawnUnit(side: Side, unitId: UnitId): boolean {
+    return this.queueUnit(side, unitId) === 'queued';
+  }
+
+  private queueUnit(
+    side: Side,
+    unitId: UnitId,
+  ): 'queued' | 'queue_full' | 'insufficient_gold' | 'unit_locked' {
     const ageIndex = side === 'player' ? this.playerAgeIndex : this.aiAgeIndex;
     const unit = getUnitDefinition(unitId);
 
     const roster = getUnitsForAge(ageIndex);
     if (!roster.some((entry) => entry.id === unit.id)) {
-      return false;
+      return 'unit_locked';
+    }
+
+    const queue = side === 'player' ? this.playerSpawnQueue : this.aiSpawnQueue;
+    if (queue.length >= MAX_SPAWN_QUEUE) {
+      return 'queue_full';
     }
 
     const sideGold = side === 'player' ? this.playerGold : this.aiGold;
     if (sideGold < unit.cost) {
-      return false;
-    }
-
-    const cooldownMap = side === 'player' ? this.playerCooldowns : this.aiCooldowns;
-    const remainingCooldown = cooldownMap.get(unit.id) ?? 0;
-    if (remainingCooldown > 0) {
-      return false;
+      return 'insufficient_gold';
     }
 
     if (side === 'player') {
@@ -523,9 +527,65 @@ export class BattleScene extends Phaser.Scene {
       this.aiGold -= unit.cost;
     }
 
-    this.unitSystem.spawn(side, unit);
-    cooldownMap.set(unit.id, unit.cooldownMs);
-    return true;
+    queue.push({
+      unitId,
+      unit,
+      spawnRateMs: unit.cooldownMs,
+    });
+
+    return 'queued';
+  }
+
+  private getQueueFailureMessage(result: 'queue_full' | 'insufficient_gold' | 'unit_locked'): string {
+    switch (result) {
+      case 'queue_full':
+        return `Queue full (${MAX_SPAWN_QUEUE}). Wait for units to deploy.`;
+      case 'insufficient_gold':
+        return 'Not enough gold for that unit.';
+      case 'unit_locked':
+      default:
+        return 'Cannot queue that unit right now.';
+    }
+  }
+
+  private processSpawnQueues(deltaMs: number): void {
+    this.playerQueueCooldownMs = this.processSideSpawnQueue(
+      'player',
+      this.playerSpawnQueue,
+      this.playerQueueCooldownMs,
+      deltaMs,
+    );
+    this.aiQueueCooldownMs = this.processSideSpawnQueue(
+      'ai',
+      this.aiSpawnQueue,
+      this.aiQueueCooldownMs,
+      deltaMs,
+    );
+  }
+
+  private processSideSpawnQueue(
+    side: Side,
+    queue: SpawnQueueEntry[],
+    cooldownMs: number,
+    deltaMs: number,
+  ): number {
+    let nextCooldownMs = Math.max(0, cooldownMs - deltaMs);
+
+    while (queue.length > 0 && nextCooldownMs <= 0) {
+      const entry = queue.shift();
+      if (!entry) {
+        break;
+      }
+
+      this.unitSystem.spawn(side, entry.unit);
+      nextCooldownMs += entry.spawnRateMs;
+    }
+
+    if (queue.length === 0 && nextCooldownMs < 0) {
+      nextCooldownMs = 0;
+    }
+
+    return nextCooldownMs;
   }
 
   private tryAdvanceAge(side: Side): boolean {
@@ -637,7 +697,7 @@ export class BattleScene extends Phaser.Scene {
 
     unit.alive = false;
     if (attackerSide === 'player') {
-      this.playerGold += unit.def.bounty;
+      this.playerGold += Math.ceil(unit.def.cost * PLAYER_KILL_BOUNTY_MULTIPLIER);
     } else {
       this.aiGold += unit.def.bounty;
     }
@@ -661,12 +721,6 @@ export class BattleScene extends Phaser.Scene {
     this.paused = false;
     this.syncHudSnapshot(true);
     this.bridge.endMatch(winner, this.playerAgeIndex);
-  }
-
-  private tickCooldowns(cooldowns: Map<UnitId, number>, deltaMs: number): void {
-    for (const [unitId, remaining] of cooldowns.entries()) {
-      cooldowns.set(unitId, Math.max(0, remaining - deltaMs));
-    }
   }
 
   private rotateTurretTowards(base: BaseState, targetX: number, targetY: number, deltaMs: number): void {
@@ -776,13 +830,17 @@ export class BattleScene extends Phaser.Scene {
     }
 
     const playerAge = getAgeDefinition(this.playerAgeIndex);
+    const queueCountByUnit = new Map<UnitId, number>();
+    for (const entry of this.playerSpawnQueue) {
+      queueCountByUnit.set(entry.unitId, (queueCountByUnit.get(entry.unitId) ?? 0) + 1);
+    }
     const unitButtons: UnitButtonState[] = getUnitsForAge(this.playerAgeIndex).map((unit) => ({
       unitId: unit.id,
       name: unit.name,
       icon: unit.icon,
       cost: unit.cost,
-      cooldownMs: unit.cooldownMs,
-      cooldownRemainingMs: this.playerCooldowns.get(unit.id) ?? 0,
+      spawnRateMs: unit.cooldownMs,
+      queuedCount: queueCountByUnit.get(unit.id) ?? 0,
     }));
 
     this.bridge.applyBattleSnapshot({
@@ -799,6 +857,10 @@ export class BattleScene extends Phaser.Scene {
       playerTurretUpgradeCost: getTurretUpgradeCost(this.playerAgeIndex, this.playerBase.turretLevel),
       aiTurretLevel: this.aiBase.turretLevel,
       aiTurretMaxLevel: getTurretMaxLevel(this.aiAgeIndex),
+      playerQueueCount: this.playerSpawnQueue.length,
+      playerQueueLimit: MAX_SPAWN_QUEUE,
+      aiQueueCount: this.aiSpawnQueue.length,
+      aiQueueLimit: MAX_SPAWN_QUEUE,
       canAdvanceAge: playerAge.advanceCost !== null,
       advanceAgeCost: playerAge.advanceCost,
       unitButtons,

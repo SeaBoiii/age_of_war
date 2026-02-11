@@ -12,6 +12,7 @@ export function ActionBar({ state }: ActionBarProps) {
 
   const canPayTurretUpgrade =
     state.playerTurretUpgradeCost !== null && state.gold >= state.playerTurretUpgradeCost;
+  const queueFull = state.playerQueueCount >= state.playerQueueLimit;
 
   const turretButtonLabel =
     state.playerTurretUpgradeCost !== null
@@ -48,16 +49,15 @@ export function ActionBar({ state }: ActionBarProps) {
           </button>
 
           <span className="text-[11px] text-slate-300 sm:text-xs">{state.battleMessage}</span>
+          <span className="rounded-md bg-indigo-500/20 px-2 py-1 text-[11px] text-indigo-100 sm:text-xs">
+            Queue: {state.playerQueueCount}/{state.playerQueueLimit}
+          </span>
         </div>
 
         <div className="grid grid-cols-3 gap-2 sm:grid-cols-6">
           {state.unitButtons.map((unit) => {
-            const coolingDown = unit.cooldownRemainingMs > 0;
             const missingGold = state.gold < unit.cost;
-            const disabled = state.paused || coolingDown || missingGold;
-            const cooldownPct = unit.cooldownMs
-              ? unit.cooldownRemainingMs / unit.cooldownMs
-              : 0;
+            const disabled = state.paused || missingGold || queueFull;
 
             return (
               <button
@@ -72,14 +72,11 @@ export function ActionBar({ state }: ActionBarProps) {
                   <span className="text-amber-200">{unit.cost}</span>
                 </div>
                 <div className="truncate text-[11px] text-slate-200 sm:text-xs">{unit.name}</div>
-
-                {coolingDown && (
-                  <div className="pointer-events-none absolute inset-0 bg-slate-950/70">
-                    <div
-                      className="absolute bottom-0 left-0 h-1 bg-cyan-300"
-                      style={{ width: `${Math.max(0, Math.min((1 - cooldownPct) * 100, 100))}%` }}
-                    />
-                  </div>
+                <div className="mt-1 text-[10px] text-cyan-200/90">
+                  Rate: {(unit.spawnRateMs / 1000).toFixed(1)}s
+                </div>
+                {unit.queuedCount > 0 && (
+                  <div className="mt-0.5 text-[10px] text-indigo-200/90">Queued: {unit.queuedCount}</div>
                 )}
               </button>
             );
