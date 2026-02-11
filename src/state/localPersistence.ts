@@ -28,10 +28,8 @@ export function loadProgress(): ProgressState {
     const parsed = JSON.parse(raw) as Partial<ProgressState>;
 
     const highestAgeUnlocked = clampAgeIndex(parsed.highestAgeUnlocked ?? 0);
-    const selectedStartAge = Math.min(
-      clampAgeIndex(parsed.selectedStartAge ?? 0),
-      highestAgeUnlocked,
-    );
+    // Always start at Hearth Age (index 0) regardless of saved progress
+    const selectedStartAge = 0;
 
     return {
       highestAgeUnlocked,
