@@ -18,10 +18,13 @@ import { getUnitDefinition, getUnitsForAge } from '../constants/units';
 import type { BaseState, Side, UnitButtonState, UnitEntity, UnitId } from '../types';
 import { GameBridge } from '../../state/gameBridge';
 import type { GameCommand } from '../../state/types';
+import { USER_GESTURE_EVENT } from '../../state/interactionEvents';
 import { AiSystem } from '../systems/AiSystem';
 import { CombatSystem } from '../systems/CombatSystem';
 import { ProjectileSystem } from '../systems/ProjectileSystem';
 import { UnitSystem } from '../systems/UnitSystem';
+
+const BGM_KEY = 'bgm_glorious_morning';
 
 export class BattleScene extends Phaser.Scene {
   private readonly bridge: GameBridge;
@@ -68,9 +71,19 @@ export class BattleScene extends Phaser.Scene {
 
   private battleMessage = 'Choose your upgrades and launch a battle.';
 
+  private bgm?: Phaser.Sound.BaseSound;
+
+  private readonly userGestureListener = () => {
+    this.ensureBgmPlaying();
+  };
+
   public constructor(bridge: GameBridge) {
     super('battle');
     this.bridge = bridge;
+  }
+
+  public preload(): void {
+    this.load.audio(BGM_KEY, 'assets/music/91476_Glorious_morning.mp3');
   }
 
   public create(): void {
@@ -127,11 +140,16 @@ export class BattleScene extends Phaser.Scene {
       tryAdvanceAge: () => this.tryAdvanceAge('ai'),
     });
 
+    window.addEventListener(USER_GESTURE_EVENT, this.userGestureListener);
+    this.events.once(Phaser.Scenes.Events.DESTROY, this.onSceneDestroy, this);
+
+    this.syncSoundState();
     this.syncHudSnapshot(true);
   }
 
   public update(_time: number, delta: number): void {
     this.consumeCommands();
+    this.syncSoundState();
 
     if (!this.matchRunning || this.paused) {
       return;
@@ -247,6 +265,7 @@ export class BattleScene extends Phaser.Scene {
     this.paused = false;
     this.matchRunning = true;
     this.battleMessage = 'Clash begins. Break the enemy stronghold.';
+    this.ensureBgmPlaying();
 
     this.syncHudSnapshot(true);
   }
@@ -538,5 +557,42 @@ export class BattleScene extends Phaser.Scene {
 
     base.tower.setFillStyle(tint, alpha);
     base.core.setFillStyle(side === 'player' ? 0x1f2937 : 0x334155, 1);
+  }
+
+  private ensureBgmPlaying(): void {
+    if (!this.bridge.getState().soundOn || !this.cache.audio.exists(BGM_KEY)) {
+      return;
+    }
+
+    if (!this.bgm) {
+      this.bgm = this.sound.add(BGM_KEY, {
+        loop: true,
+        volume: 0.34,
+      });
+    }
+
+    if (!this.bgm.isPlaying) {
+      this.sound.mute = false;
+      this.bgm.play();
+    }
+  }
+
+  private syncSoundState(): void {
+    const soundOn = this.bridge.getState().soundOn;
+    this.sound.mute = !soundOn;
+
+    if (soundOn) {
+      this.ensureBgmPlaying();
+    }
+  }
+
+  private onSceneDestroy(): void {
+    window.removeEventListener(USER_GESTURE_EVENT, this.userGestureListener);
+
+    if (this.bgm) {
+      this.bgm.stop();
+      this.bgm.destroy();
+      this.bgm = undefined;
+    }
   }
 }

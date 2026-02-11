@@ -1,5 +1,6 @@
 ﻿import { AGE_DEFINITIONS } from '../../game/constants/ages';
 import { gameBridge } from '../../state/gameBridge';
+import { emitUserGesture } from '../../state/interactionEvents';
 import { getMetaUpgradeCost } from '../../state/localPersistence';
 import type { GameUiState } from '../../state/types';
 
@@ -81,7 +82,10 @@ export function StartScreen({ state }: StartScreenProps) {
           <button
             type="button"
             className="rounded-lg border border-amber-300/45 bg-amber-400/20 px-5 py-2 text-sm font-semibold text-amber-100 transition hover:bg-amber-300/30"
-            onClick={() => gameBridge.dispatch({ type: 'start_match' })}
+            onClick={() => {
+              emitUserGesture();
+              gameBridge.dispatch({ type: 'start_match' });
+            }}
           >
             Play
           </button>
@@ -102,6 +106,10 @@ export function StartScreen({ state }: StartScreenProps) {
             <p>Destroy the enemy base before your base falls.</p>
           </div>
         )}
+
+        <p className="mt-4 text-center text-[11px] text-slate-400 sm:text-xs">
+          Music credit: &quot;Glorious Morning&quot; by Waterflame.
+        </p>
       </div>
     </div>
   );

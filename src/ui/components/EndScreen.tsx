@@ -1,4 +1,5 @@
 ﻿import { gameBridge } from '../../state/gameBridge';
+import { emitUserGesture } from '../../state/interactionEvents';
 import type { GameUiState } from '../../state/types';
 
 interface EndScreenProps {
@@ -21,7 +22,10 @@ export function EndScreen({ state }: EndScreenProps) {
           <button
             type="button"
             className="rounded-lg border border-amber-300/45 bg-amber-400/20 px-4 py-2 text-sm font-semibold text-amber-100 transition hover:bg-amber-300/30"
-            onClick={() => gameBridge.dispatch({ type: 'restart_match' })}
+            onClick={() => {
+              emitUserGesture();
+              gameBridge.dispatch({ type: 'restart_match' });
+            }}
           >
             Restart
           </button>

@@ -1,5 +1,6 @@
 ﻿import { AGE_DEFINITIONS } from '../../game/constants/ages';
 import { gameBridge } from '../../state/gameBridge';
+import { emitUserGesture } from '../../state/interactionEvents';
 import type { GameUiState } from '../../state/types';
 
 interface GameHudProps {
@@ -37,7 +38,10 @@ export function GameHud({ state }: GameHudProps) {
             <button
               type="button"
               className="rounded-md border border-white/25 bg-slate-800/75 px-2 py-1 text-[11px] text-slate-100 transition hover:bg-slate-700 sm:text-xs"
-              onClick={() => gameBridge.dispatch({ type: 'toggle_sound' })}
+              onClick={() => {
+                emitUserGesture();
+                gameBridge.dispatch({ type: 'toggle_sound' });
+              }}
             >
               Sound: {state.soundOn ? 'On' : 'Off'}
             </button>

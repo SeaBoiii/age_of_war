@@ -24,7 +24,13 @@ Single-player 1-lane tug-of-war strategy game inspired by Age of War.
 - AI using the same economy/spawn/age rules with defensive and mix heuristics.
 - Start screen (Play + How to Play + meta upgrades + start-age selection).
 - End screen (Win/Lose + Restart/Menu).
+- Looping background music with in-game sound toggle.
 - Responsive layout for desktop/mobile.
+
+## Audio Credits
+
+- "Glorious Morning" by Waterflame
+- Track file: `public/assets/music/91476_Glorious_morning.mp3`
 
 ## Run Locally
 
