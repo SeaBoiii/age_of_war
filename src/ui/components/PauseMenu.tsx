@@ -73,7 +73,7 @@ export function PauseMenu({ state }: PauseMenuProps) {
 
           <button
             type="button"
-            className="mt-2 rounded-md border border-rose-300/40 bg-rose-500/20 px-3 py-2 text-sm font-semibold text-rose-100 transition hover:bg-rose-400/30"
+            className="mt-8 rounded-md border border-rose-300/40 bg-rose-500/20 px-3 py-2 text-sm font-semibold text-rose-100 transition hover:bg-rose-400/30"
             onClick={() => gameBridge.dispatch({ type: 'return_to_menu' })}
           >
             Quit Game
