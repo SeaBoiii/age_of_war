@@ -34,42 +34,49 @@ export function PauseMenu({ state }: PauseMenuProps) {
             Resume
           </button>
 
+          <div className="rounded-md border border-white/20 bg-slate-800/70 px-3 py-2">
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-xs uppercase tracking-wider text-slate-400">Audio</span>
+              <button
+                type="button"
+                className="rounded-md border border-white/30 bg-slate-700/60 px-3 py-1 text-xs text-slate-100 transition hover:bg-slate-600/70"
+                aria-label={state.soundOn ? 'Mute sound' : 'Unmute sound'}
+                title={state.soundOn ? 'Mute sound' : 'Unmute sound'}
+                onClick={() => {
+                  emitUserGesture();
+                  gameBridge.dispatch({ type: 'toggle_sound' });
+                }}
+              >
+                {state.soundOn ? '🔊' : '🔇'}
+              </button>
+            </div>
+
+            <label className="mt-2 block">
+              <div className="mb-1 text-xs text-slate-300">Volume: {Math.round(state.soundVolume * 100)}%</div>
+              <input
+                type="range"
+                min={0}
+                max={100}
+                step={1}
+                value={Math.round(state.soundVolume * 100)}
+                className="w-full accent-cyan-400"
+                onChange={(event) => {
+                  emitUserGesture();
+                  gameBridge.dispatch({
+                    type: 'set_sound_volume',
+                    value: Number(event.currentTarget.value) / 100,
+                  });
+                }}
+              />
+            </label>
+          </div>
+
           <button
             type="button"
-            className="rounded-md border border-white/30 bg-slate-700/70 px-3 py-2 text-sm text-slate-100 transition hover:bg-slate-600/75"
-            onClick={() => {
-              emitUserGesture();
-              gameBridge.dispatch({ type: 'toggle_sound' });
-            }}
+            className="mt-2 rounded-md border border-rose-300/40 bg-rose-500/20 px-3 py-2 text-sm font-semibold text-rose-100 transition hover:bg-rose-400/30"
+            onClick={() => gameBridge.dispatch({ type: 'return_to_menu' })}
           >
-            {state.soundOn ? 'Mute Sound' : 'Unmute Sound'}
-          </button>
-
-          <label className="rounded-md border border-white/20 bg-slate-800/70 px-3 py-2">
-            <div className="mb-1 text-xs text-slate-300">Volume: {Math.round(state.soundVolume * 100)}%</div>
-            <input
-              type="range"
-              min={0}
-              max={100}
-              step={1}
-              value={Math.round(state.soundVolume * 100)}
-              className="w-full accent-cyan-400"
-              onChange={(event) => {
-                emitUserGesture();
-                gameBridge.dispatch({
-                  type: 'set_sound_volume',
-                  value: Number(event.currentTarget.value) / 100,
-                });
-              }}
-            />
-          </label>
-
-          <button
-            type="button"
-            className="rounded-md border border-rose-300/40 bg-rose-500/20 px-3 py-2 text-sm font-semibold text-rose-100 transition hover:bg-rose-400/30"
-            onClick={() => gameBridge.dispatch({ type: 'restart_match' })}
-          >
-            Reset Match
+            Quit Game
           </button>
         </div>
       </div>

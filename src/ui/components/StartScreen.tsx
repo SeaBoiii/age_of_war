@@ -1,7 +1,5 @@
-﻿import { AGE_DEFINITIONS } from '../../game/constants/ages';
-import { gameBridge } from '../../state/gameBridge';
+﻿import { gameBridge } from '../../state/gameBridge';
 import { emitUserGesture } from '../../state/interactionEvents';
-import { getMetaUpgradeCost } from '../../state/localPersistence';
 import type { GameUiState } from '../../state/types';
 
 interface StartScreenProps {
@@ -9,12 +7,9 @@ interface StartScreenProps {
 }
 
 export function StartScreen({ state }: StartScreenProps) {
-  const incomeUpgradeCost = getMetaUpgradeCost(state.progress, 'income');
-  const baseUpgradeCost = getMetaUpgradeCost(state.progress, 'baseHp');
-
   return (
     <div className="absolute inset-0 flex items-center justify-center bg-slate-950/72 p-4 backdrop-blur-sm">
-      <div className="w-full max-w-2xl rounded-2xl border border-white/20 bg-slate-900/88 p-5 text-slate-100 shadow-2xl sm:p-7">
+      <div className="w-full max-w-xl rounded-2xl border border-white/20 bg-slate-900/88 p-5 text-slate-100 shadow-2xl sm:p-7">
         <h1 className="text-center font-serif text-3xl tracking-wide text-amber-200 sm:text-4xl">
           Age of War: Echoes
         </h1>
@@ -22,63 +17,7 @@ export function StartScreen({ state }: StartScreenProps) {
           1-lane tug-of-war. Build momentum, time age upgrades, and break the enemy citadel.
         </p>
 
-        <div className="mt-5 grid gap-4 sm:grid-cols-2">
-          <div className="rounded-lg border border-white/15 bg-slate-800/70 p-3">
-            <div className="mb-2 text-xs uppercase tracking-wider text-slate-400">Meta Progress</div>
-            <div className="mb-3 text-sm text-slate-200">Shards: {state.progress.shards}</div>
-
-            <div className="flex flex-col gap-2">
-              <button
-                type="button"
-                className="rounded-md border border-emerald-300/40 bg-emerald-400/20 px-3 py-2 text-left text-xs text-emerald-100 transition hover:bg-emerald-400/30 disabled:cursor-not-allowed disabled:opacity-45"
-                disabled={state.progress.shards < incomeUpgradeCost}
-                onClick={() => gameBridge.dispatch({ type: 'buy_meta_upgrade', upgrade: 'income' })}
-              >
-                Income Upgrade Lv.{state.progress.meta.incomeLevel} ({incomeUpgradeCost} shards)
-              </button>
-              <button
-                type="button"
-                className="rounded-md border border-cyan-300/40 bg-cyan-400/20 px-3 py-2 text-left text-xs text-cyan-100 transition hover:bg-cyan-400/30 disabled:cursor-not-allowed disabled:opacity-45"
-                disabled={state.progress.shards < baseUpgradeCost}
-                onClick={() => gameBridge.dispatch({ type: 'buy_meta_upgrade', upgrade: 'baseHp' })}
-              >
-                Base HP Upgrade Lv.{state.progress.meta.baseHpLevel} ({baseUpgradeCost} shards)
-              </button>
-            </div>
-          </div>
-
-          <div className="rounded-lg border border-white/15 bg-slate-800/70 p-3">
-            <div className="mb-2 text-xs uppercase tracking-wider text-slate-400">Starting Age</div>
-            <div className="mb-2 text-xs text-slate-300">
-              Highest unlocked: {AGE_DEFINITIONS[state.progress.highestAgeUnlocked]?.label}
-            </div>
-
-            <div className="grid grid-cols-2 gap-2">
-              {AGE_DEFINITIONS.map((age, index) => {
-                const unlocked = index <= state.progress.highestAgeUnlocked;
-                const selected = index === state.progress.selectedStartAge;
-
-                return (
-                  <button
-                    key={age.id}
-                    type="button"
-                    className={`rounded-md border px-2 py-1 text-xs transition ${
-                      selected
-                        ? 'border-amber-300 bg-amber-400/20 text-amber-100'
-                        : 'border-white/20 bg-slate-700/60 text-slate-200'
-                    }`}
-                    disabled={!unlocked}
-                    onClick={() => gameBridge.dispatch({ type: 'set_start_age', ageIndex: index })}
-                  >
-                    {age.label}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        </div>
-
-        <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
+        <div className="mt-6 flex flex-col gap-3">
           <button
             type="button"
             className="rounded-lg border border-amber-300/45 bg-amber-400/20 px-5 py-2 text-sm font-semibold text-amber-100 transition hover:bg-amber-300/30"
@@ -89,6 +28,21 @@ export function StartScreen({ state }: StartScreenProps) {
           >
             Play
           </button>
+
+          <div className="rounded-lg border border-white/15 bg-slate-800/70 px-3 py-2">
+            <div className="mb-1 text-xs uppercase tracking-wider text-slate-400">Difficulty</div>
+            <select
+              disabled
+              className="w-full cursor-not-allowed rounded-md border border-white/20 bg-slate-700/70 px-2 py-1 text-sm text-slate-300 opacity-70"
+              defaultValue="normal"
+            >
+              <option value="easy">Easy</option>
+              <option value="normal">Normal</option>
+              <option value="hard">Hard</option>
+            </select>
+            <div className="mt-1 text-[11px] text-slate-400">Coming soon (placeholder)</div>
+          </div>
+
           <button
             type="button"
             className="rounded-lg border border-white/30 bg-slate-700/60 px-5 py-2 text-sm text-slate-100 transition hover:bg-slate-600/70"
@@ -96,16 +50,43 @@ export function StartScreen({ state }: StartScreenProps) {
           >
             {state.showHowTo ? 'Hide How to Play' : 'How to Play'}
           </button>
-          <button
-            type="button"
-            className="rounded-lg border border-white/30 bg-slate-700/60 px-5 py-2 text-sm text-slate-100 transition hover:bg-slate-600/70"
-            onClick={() => {
-              emitUserGesture();
-              gameBridge.dispatch({ type: 'toggle_sound' });
-            }}
-          >
-            Sound: {state.soundOn ? 'On' : 'Off'}
-          </button>
+
+          <div className="rounded-lg border border-white/15 bg-slate-800/70 px-3 py-2">
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-xs uppercase tracking-wider text-slate-400">Audio</span>
+              <button
+                type="button"
+                className="rounded-md border border-white/30 bg-slate-700/60 px-3 py-1 text-xs text-slate-100 transition hover:bg-slate-600/70"
+                aria-label={state.soundOn ? 'Mute sound' : 'Unmute sound'}
+                title={state.soundOn ? 'Mute sound' : 'Unmute sound'}
+                onClick={() => {
+                  emitUserGesture();
+                  gameBridge.dispatch({ type: 'toggle_sound' });
+                }}
+              >
+                {state.soundOn ? '🔊' : '🔇'}
+              </button>
+            </div>
+
+            <label className="mt-2 block">
+              <div className="mb-1 text-xs text-slate-300">Volume: {Math.round(state.soundVolume * 100)}%</div>
+              <input
+                type="range"
+                min={0}
+                max={100}
+                step={1}
+                value={Math.round(state.soundVolume * 100)}
+                className="w-full accent-cyan-400"
+                onChange={(event) => {
+                  emitUserGesture();
+                  gameBridge.dispatch({
+                    type: 'set_sound_volume',
+                    value: Number(event.currentTarget.value) / 100,
+                  });
+                }}
+              />
+            </label>
+          </div>
         </div>
 
         {state.showHowTo && (
@@ -124,4 +105,3 @@ export function StartScreen({ state }: StartScreenProps) {
     </div>
   );
 }
-
