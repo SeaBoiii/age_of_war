@@ -33,6 +33,7 @@ import { UnitSystem } from '../systems/UnitSystem';
 
 const BGM_KEY = 'bgm_glorious_morning';
 const TURRET_TURN_SPEED_RAD_PER_SECOND = 4.8;
+const DEBUG_ENABLED = import.meta.env.DEV;
 
 export class BattleScene extends Phaser.Scene {
   private readonly bridge: GameBridge;
@@ -44,6 +45,8 @@ export class BattleScene extends Phaser.Scene {
   private projectileSystem!: ProjectileSystem;
 
   private aiSystem!: AiSystem;
+
+  private playerAiSystem!: AiSystem;
 
   private playerBase!: BaseState;
 
@@ -78,6 +81,8 @@ export class BattleScene extends Phaser.Scene {
   private matchRunning = false;
 
   private paused = false;
+
+  private lastAiVsAiMode = false;
 
   private battleMessage = 'Choose your upgrades and launch a battle.';
 
@@ -149,8 +154,7 @@ export class BattleScene extends Phaser.Scene {
     this.aiSystem = new AiSystem({
       getAiAgeIndex: () => this.aiAgeIndex,
       getAiGold: () => this.aiGold,
-      getAiBaseX: () => this.aiBase.x,
-      getPlayerFrontX: () => this.getFrontX('player'),
+      isUnderPressure: () => this.getFrontX('player') > this.aiBase.x - 255,
       getAiAdvanceCost: () => getAgeDefinition(this.aiAgeIndex).advanceCost,
       canAiAdvance: () => canAdvanceAge(this.aiAgeIndex),
       getAiTurretUpgradeCost: () => getTurretUpgradeCost(this.aiAgeIndex, this.aiBase.turretLevel),
@@ -159,6 +163,22 @@ export class BattleScene extends Phaser.Scene {
       trySpawnUnit: (unitId) => this.trySpawnUnit('ai', unitId),
       tryAdvanceAge: () => this.tryAdvanceAge('ai'),
       tryUpgradeTurret: () => this.tryUpgradeTurret('ai'),
+      debugLog: (message) => this.debugLog(`AI ${message}`),
+    });
+
+    this.playerAiSystem = new AiSystem({
+      getAiAgeIndex: () => this.playerAgeIndex,
+      getAiGold: () => this.playerGold,
+      isUnderPressure: () => this.getFrontX('ai') < this.playerBase.x + 255,
+      getAiAdvanceCost: () => getAgeDefinition(this.playerAgeIndex).advanceCost,
+      canAiAdvance: () => canAdvanceAge(this.playerAgeIndex),
+      getAiTurretUpgradeCost: () => getTurretUpgradeCost(this.playerAgeIndex, this.playerBase.turretLevel),
+      canAiUpgradeTurret: () => canUpgradeTurret(this.playerAgeIndex, this.playerBase.turretLevel),
+      getRoster: () => getUnitsForAge(this.playerAgeIndex),
+      trySpawnUnit: (unitId) => this.trySpawnUnit('player', unitId),
+      tryAdvanceAge: () => this.tryAdvanceAge('player'),
+      tryUpgradeTurret: () => this.tryUpgradeTurret('player'),
+      debugLog: (message) => this.debugLog(`PLAYER-AI ${message}`),
     });
 
     window.addEventListener(USER_GESTURE_EVENT, this.userGestureListener);
@@ -212,6 +232,9 @@ export class BattleScene extends Phaser.Scene {
         if (!this.matchRunning || this.paused) {
           break;
         }
+        if (this.isAiVsAiMode()) {
+          break;
+        }
 
         const spawned = this.trySpawnUnit('player', command.unitId);
         if (!spawned) {
@@ -224,6 +247,9 @@ export class BattleScene extends Phaser.Scene {
         if (!this.matchRunning || this.paused) {
           break;
         }
+        if (this.isAiVsAiMode() && command.side === 'player') {
+          break;
+        }
 
         const advanced = this.tryAdvanceAge(command.side);
         if (!advanced && command.side === 'player') {
@@ -234,6 +260,9 @@ export class BattleScene extends Phaser.Scene {
       }
       case 'upgrade_turret': {
         if (!this.matchRunning || this.paused) {
+          break;
+        }
+        if (this.isAiVsAiMode() && command.side === 'player') {
           break;
         }
 
@@ -258,6 +287,7 @@ export class BattleScene extends Phaser.Scene {
     this.unitSystem.reset();
     this.projectileSystem.reset();
     this.aiSystem.reset();
+    this.playerAiSystem.reset();
 
     this.fixedAccumulatorMs = 0;
     this.incomeAccumulatorMs = 0;
@@ -306,7 +336,12 @@ export class BattleScene extends Phaser.Scene {
 
     this.paused = false;
     this.matchRunning = true;
+    this.lastAiVsAiMode = this.isAiVsAiMode();
     this.battleMessage = 'Clash begins. Break the enemy stronghold.';
+    this.debugLog(
+      `match-start playerAge=${getAgeDefinition(this.playerAgeIndex).label} aiAge=${getAgeDefinition(this.aiAgeIndex).label} playerTurret=L1 aiTurret=L1`,
+    );
+    this.debugLog(`mode=${this.lastAiVsAiMode ? 'AI vs AI' : 'Player vs AI'}`);
     this.ensureBgmPlaying();
 
     this.syncHudSnapshot(true);
@@ -314,6 +349,13 @@ export class BattleScene extends Phaser.Scene {
 
   private simulateStep(deltaMs: number): void {
     this.elapsedMs += deltaMs;
+
+    const aiVsAiMode = this.isAiVsAiMode();
+    if (aiVsAiMode !== this.lastAiVsAiMode) {
+      this.lastAiVsAiMode = aiVsAiMode;
+      this.playerAiSystem.reset();
+      this.debugLog(`mode-changed ${aiVsAiMode ? 'AI vs AI enabled' : 'AI vs AI disabled'}`);
+    }
 
     this.tickCooldowns(this.playerCooldowns, deltaMs);
     this.tickCooldowns(this.aiCooldowns, deltaMs);
@@ -325,6 +367,9 @@ export class BattleScene extends Phaser.Scene {
       this.incomeAccumulatorMs -= PASSIVE_INCOME_TICK_MS;
     }
 
+    if (aiVsAiMode) {
+      this.playerAiSystem.update(deltaMs);
+    }
     this.aiSystem.update(deltaMs);
     this.unitSystem.update(deltaMs);
     this.projectileSystem.update(deltaMs);
@@ -461,6 +506,7 @@ export class BattleScene extends Phaser.Scene {
       this.playerBase.weaponCooldownMs = 0;
       this.bridge.unlockAge(this.playerAgeIndex);
       this.battleMessage = `Advanced to ${getAgeDefinition(this.playerAgeIndex).label}.`;
+      this.debugLog(`player advanced to ${getAgeDefinition(this.playerAgeIndex).label}`);
       this.updateBaseVisual('player');
       this.rotateTurretToIdle(this.playerBase, FIXED_STEP_MS);
     } else {
@@ -470,6 +516,7 @@ export class BattleScene extends Phaser.Scene {
       this.aiBase.weaponCooldownMs = 0;
       this.updateBaseVisual('ai');
       this.rotateTurretToIdle(this.aiBase, FIXED_STEP_MS);
+      this.debugLog(`AI advanced to ${getAgeDefinition(this.aiAgeIndex).label}`);
     }
 
     this.refreshIncomeRates();
@@ -504,7 +551,11 @@ export class BattleScene extends Phaser.Scene {
     if (side === 'player') {
       const turretLevel = getTurretLevelDefinition(ageIndex, base.turretLevel);
       this.battleMessage = `Turret upgraded to ${turretLevel.label}.`;
+      this.debugLog(`player upgraded turret to ${turretLevel.label}`);
       this.syncHudSnapshot(true);
+    } else {
+      const turretLevel = getTurretLevelDefinition(ageIndex, base.turretLevel);
+      this.debugLog(`AI upgraded turret to ${turretLevel.label}`);
     }
 
     return true;
@@ -764,5 +815,18 @@ export class BattleScene extends Phaser.Scene {
       this.bgm.destroy();
       this.bgm = undefined;
     }
+  }
+
+  private debugLog(message: string): void {
+    if (!DEBUG_ENABLED) {
+      return;
+    }
+
+    const timestampSec = (this.elapsedMs / 1000).toFixed(1);
+    this.bridge.pushDebugLog(`[${timestampSec}s] ${message}`);
+  }
+
+  private isAiVsAiMode(): boolean {
+    return DEBUG_ENABLED && this.bridge.getState().debugAiVsAi;
   }
 }

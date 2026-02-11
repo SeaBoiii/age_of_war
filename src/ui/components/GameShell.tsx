@@ -2,6 +2,7 @@
 import { gameBridge } from '../../state/gameBridge';
 import { useGameState } from '../hooks/useGameState';
 import { ActionBar } from './ActionBar';
+import { DebugConsole } from './DebugConsole';
 import { EndScreen } from './EndScreen';
 import { GameHud } from './GameHud';
 import { PauseMenu } from './PauseMenu';
@@ -36,7 +37,8 @@ export function GameShell() {
       </div>
 
       {state.mode === 'playing' && <GameHud state={state} />}
-      {state.mode === 'playing' && <ActionBar state={state} />}
+      {state.mode === 'playing' && !state.debugAiVsAi && <ActionBar state={state} />}
+      {import.meta.env.DEV && state.mode === 'playing' && <DebugConsole state={state} />}
       {state.mode === 'start' && <StartScreen state={state} />}
       {state.mode === 'ended' && <EndScreen state={state} />}
 

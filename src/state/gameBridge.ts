@@ -12,6 +12,7 @@ import {
 import type { BattleSnapshot, GameCommand, GameUiState, ProgressState } from './types';
 
 type Listener = () => void;
+const MAX_DEBUG_LOG_LINES = 80;
 
 function createUnitButtons(ageIndex: number) {
   return getUnitsForAge(ageIndex).map((unit) => ({
@@ -38,6 +39,8 @@ function createInitialState(progress: ProgressState): GameUiState {
     paused: false,
     soundOn: true,
     soundVolume: 0.34,
+    debugAiVsAi: false,
+    debugLogs: [],
     winner: null,
     gold: 0,
     aiGold: 0,
@@ -94,6 +97,14 @@ export class GameBridge {
         this.patchState({ soundVolume: clampSoundVolume(command.value) });
         return;
       }
+      case 'set_debug_ai_vs_ai': {
+        if (!import.meta.env.DEV) {
+          return;
+        }
+
+        this.patchState({ debugAiVsAi: command.value });
+        return;
+      }
       case 'set_start_age': {
         const progress = setSelectedStartAge(this.state.progress, command.ageIndex);
         const ageIndex = progress.selectedStartAge;
@@ -120,6 +131,7 @@ export class GameBridge {
           paused: false,
           winner: null,
           showHowTo: false,
+          debugLogs: [],
           battleMessage: 'Choose your upgrades and launch a battle.',
         });
         return;
@@ -149,6 +161,7 @@ export class GameBridge {
           paused: false,
           winner: null,
           showHowTo: false,
+          debugLogs: [],
           battleMessage: 'Clash begins. Push the enemy base.',
         });
         return;
@@ -160,6 +173,7 @@ export class GameBridge {
           paused: false,
           winner: null,
           showHowTo: false,
+          debugLogs: [],
           battleMessage: 'Fresh battle deployed.',
         });
         return;
@@ -198,6 +212,19 @@ export class GameBridge {
 
   public applyBattleSnapshot(snapshot: BattleSnapshot): void {
     this.patchState(snapshot);
+  }
+
+  public pushDebugLog(message: string): void {
+    if (!import.meta.env.DEV || !message.trim()) {
+      return;
+    }
+
+    const nextLogs = [...this.state.debugLogs, message];
+    if (nextLogs.length > MAX_DEBUG_LOG_LINES) {
+      nextLogs.splice(0, nextLogs.length - MAX_DEBUG_LOG_LINES);
+    }
+
+    this.patchState({ debugLogs: nextLogs });
   }
 
   public unlockAge(ageIndex: number): void {

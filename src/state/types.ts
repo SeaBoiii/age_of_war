@@ -20,6 +20,8 @@ export interface GameUiState {
   paused: boolean;
   soundOn: boolean;
   soundVolume: number;
+  debugAiVsAi: boolean;
+  debugLogs: string[];
   winner: Side | null;
   gold: number;
   aiGold: number;
@@ -50,6 +52,7 @@ export type GameCommand =
   | { type: 'toggle_pause' }
   | { type: 'toggle_sound' }
   | { type: 'set_sound_volume'; value: number }
+  | { type: 'set_debug_ai_vs_ai'; value: boolean }
   | { type: 'set_how_to'; value: boolean }
   | { type: 'return_to_menu' }
   | { type: 'set_start_age'; ageIndex: number }

@@ -43,6 +43,28 @@ export function StartScreen({ state }: StartScreenProps) {
             <div className="mt-1 text-[11px] text-slate-400">Coming soon (placeholder)</div>
           </div>
 
+          {import.meta.env.DEV && (
+            <div className="rounded-lg border border-cyan-300/25 bg-cyan-950/30 px-3 py-2">
+              <div className="mb-1 text-xs uppercase tracking-wider text-cyan-300">Dev Mode</div>
+              <button
+                type="button"
+                className={`w-full rounded-md border px-3 py-2 text-left text-xs transition ${
+                  state.debugAiVsAi
+                    ? 'border-emerald-300/40 bg-emerald-400/20 text-emerald-100'
+                    : 'border-cyan-300/35 bg-slate-700/65 text-cyan-100 hover:bg-slate-600/75'
+                }`}
+                onClick={() =>
+                  gameBridge.dispatch({
+                    type: 'set_debug_ai_vs_ai',
+                    value: !state.debugAiVsAi,
+                  })
+                }
+              >
+                AI vs AI: {state.debugAiVsAi ? 'On' : 'Off'}
+              </button>
+            </div>
+          )}
+
           <button
             type="button"
             className="rounded-lg border border-white/30 bg-slate-700/60 px-5 py-2 text-sm text-slate-100 transition hover:bg-slate-600/70"
