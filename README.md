@@ -11,11 +11,11 @@ Single-player 1-lane tug-of-war strategy game inspired by Age of War.
 
 ## Features (MVP)
 
-- Player base (left) vs AI base (right) with HP and age-scaled base weapons.
+- Player base (left) vs AI base (right) with HP and age-scaled base turrets, including turret upgrades per age.
 - Passive gold income + kill rewards.
 - Unit spawning with costs and per-unit cooldowns.
 - Melee and ranged combat with projectiles and splash/pierce abilities.
-- 5 ages with unique rosters:
+- 5 ages with unique rosters and configurable per-age economy/turret settings:
   - Hearth: Swordsman, Archer, Spearman
   - Arcane: Shield Acolyte, Battlemage, Hexer
   - Beast: Wolf Rider, Treant, Wyvern
@@ -107,7 +107,7 @@ Unit definitions are data-driven in:
 
 - `src/game/constants/units.ts`
 
-Add/update units there (cost/stats/traits/projectile), then include them in the age roster map.
+Add/update units there (cost/stats/traits/projectile), then include unit IDs in each age config in `src/game/constants/ages.ts`.
 
 ## Persistence
 
@@ -131,3 +131,5 @@ Stores:
 - [x] Base paths handled for Pages
 - [x] Responsive UI
 - [x] No remote assets/services required
+
+

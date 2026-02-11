@@ -96,13 +96,23 @@ export function StartScreen({ state }: StartScreenProps) {
           >
             {state.showHowTo ? 'Hide How to Play' : 'How to Play'}
           </button>
+          <button
+            type="button"
+            className="rounded-lg border border-white/30 bg-slate-700/60 px-5 py-2 text-sm text-slate-100 transition hover:bg-slate-600/70"
+            onClick={() => {
+              emitUserGesture();
+              gameBridge.dispatch({ type: 'toggle_sound' });
+            }}
+          >
+            Sound: {state.soundOn ? 'On' : 'Off'}
+          </button>
         </div>
 
         {state.showHowTo && (
           <div className="mt-4 rounded-lg border border-white/15 bg-slate-800/70 p-3 text-xs leading-relaxed text-slate-200 sm:text-sm">
             <p>Earn gold over time and from kills.</p>
             <p>Spawn units from the bottom bar. Melee blocks lanes; ranged fires projectiles.</p>
-            <p>Advance ages when affordable to unlock new rosters and stronger base weapons.</p>
+            <p>Advance ages and buy turret upgrades to unlock stronger rosters and base firepower.</p>
             <p>Destroy the enemy base before your base falls.</p>
           </div>
         )}
@@ -114,3 +124,4 @@ export function StartScreen({ state }: StartScreenProps) {
     </div>
   );
 }
+

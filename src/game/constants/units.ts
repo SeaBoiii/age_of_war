@@ -1,5 +1,5 @@
-﻿import { AGE_DEFINITIONS, ageIndexToId } from './ages';
-import type { AgeId, UnitDefinition, UnitId, UnitTag } from '../types';
+﻿import { AGE_DEFINITIONS, getAgeDefinition } from './ages';
+import type { UnitDefinition, UnitId, UnitTag } from '../types';
 
 export const UNIT_DEFINITIONS: Record<UnitId, UnitDefinition> = {
   swordsman: {
@@ -341,17 +341,9 @@ export const UNIT_DEFINITIONS: Record<UnitId, UnitDefinition> = {
   },
 };
 
-export const AGE_UNIT_ORDER: Record<AgeId, UnitId[]> = {
-  hearth: ['swordsman', 'archer', 'spearman'],
-  arcane: ['shield_acolyte', 'battlemage', 'hexer'],
-  beast: ['wolf_rider', 'treant', 'wyvern'],
-  runeforge: ['golem', 'rune_gunner', 'turret_caster'],
-  astral: ['portal_knight', 'starcaller', 'void_reaper'],
-};
-
 export function getUnitsForAge(ageIndex: number): UnitDefinition[] {
-  const ageId = ageIndexToId(ageIndex);
-  return AGE_UNIT_ORDER[ageId].map((unitId) => UNIT_DEFINITIONS[unitId]);
+  const age = getAgeDefinition(ageIndex);
+  return age.unitRoster.map((unitId) => UNIT_DEFINITIONS[unitId]);
 }
 
 export function getUnitDefinition(unitId: UnitId): UnitDefinition {
@@ -360,7 +352,7 @@ export function getUnitDefinition(unitId: UnitId): UnitDefinition {
 
 export function getUnitsUpToAge(ageIndex: number): UnitDefinition[] {
   return AGE_DEFINITIONS.slice(0, Math.max(0, ageIndex) + 1).flatMap((age) =>
-    AGE_UNIT_ORDER[age.id].map((unitId) => UNIT_DEFINITIONS[unitId]),
+    age.unitRoster.map((unitId) => UNIT_DEFINITIONS[unitId]),
   );
 }
 
@@ -384,3 +376,4 @@ export function pickUnitByTag(
 export function getCheapestUnitCost(ageIndex: number): number {
   return Math.min(...getUnitsForAge(ageIndex).map((unit) => unit.cost));
 }
+

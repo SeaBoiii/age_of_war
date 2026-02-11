@@ -10,6 +10,14 @@ export function ActionBar({ state }: ActionBarProps) {
   const nextAgeLabel = AGE_DEFINITIONS[state.playerAgeIndex + 1]?.label;
   const canPayAdvance = state.advanceAgeCost !== null && state.gold >= state.advanceAgeCost;
 
+  const canPayTurretUpgrade =
+    state.playerTurretUpgradeCost !== null && state.gold >= state.playerTurretUpgradeCost;
+
+  const turretButtonLabel =
+    state.playerTurretUpgradeCost !== null
+      ? `Turret ${state.playerTurretLevel + 1}->${state.playerTurretLevel + 2} (${state.playerTurretUpgradeCost})`
+      : `Turret Max (${state.playerTurretLevel + 1}/${state.playerTurretMaxLevel + 1})`;
+
   return (
     <div className="pointer-events-none absolute inset-x-0 bottom-0 p-2 sm:p-3">
       <div className="pointer-events-auto rounded-xl border border-white/20 bg-slate-900/78 p-2 backdrop-blur sm:p-3">
@@ -28,6 +36,15 @@ export function ActionBar({ state }: ActionBarProps) {
             {state.canAdvanceAge && state.advanceAgeCost !== null
               ? `Advance (${state.advanceAgeCost}) ${nextAgeLabel ? `-> ${nextAgeLabel}` : ''}`
               : 'Max Age'}
+          </button>
+
+          <button
+            type="button"
+            className="shrink-0 rounded-lg border border-sky-300/40 bg-sky-400/20 px-3 py-2 text-xs font-bold text-sky-100 transition disabled:cursor-not-allowed disabled:opacity-45 sm:text-sm"
+            disabled={state.paused || state.playerTurretUpgradeCost === null || !canPayTurretUpgrade}
+            onClick={() => gameBridge.dispatch({ type: 'upgrade_turret', side: 'player' })}
+          >
+            {turretButtonLabel}
           </button>
 
           <span className="text-[11px] text-slate-300 sm:text-xs">{state.battleMessage}</span>

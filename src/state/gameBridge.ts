@@ -1,4 +1,4 @@
-﻿import { AGE_DEFINITIONS } from '../game/constants/ages';
+﻿import { getAgeDefinition, getTurretMaxLevel, getTurretUpgradeCost } from '../game/constants/ages';
 import { getUnitsForAge } from '../game/constants/units';
 import type { Side } from '../game/types';
 import {
@@ -13,7 +13,21 @@ import type { BattleSnapshot, GameCommand, GameUiState, ProgressState } from './
 
 type Listener = () => void;
 
+function createUnitButtons(ageIndex: number) {
+  return getUnitsForAge(ageIndex).map((unit) => ({
+    unitId: unit.id,
+    name: unit.name,
+    icon: unit.icon,
+    cost: unit.cost,
+    cooldownMs: unit.cooldownMs,
+    cooldownRemainingMs: 0,
+  }));
+}
+
 function createInitialState(progress: ProgressState): GameUiState {
+  const ageIndex = progress.selectedStartAge;
+  const age = getAgeDefinition(ageIndex);
+
   return {
     mode: 'start',
     showHowTo: false,
@@ -22,22 +36,20 @@ function createInitialState(progress: ProgressState): GameUiState {
     winner: null,
     gold: 0,
     aiGold: 0,
-    playerAgeIndex: progress.selectedStartAge,
-    aiAgeIndex: progress.selectedStartAge,
+    playerAgeIndex: ageIndex,
+    aiAgeIndex: ageIndex,
     playerBaseHp: 1000,
     aiBaseHp: 1000,
     playerBaseMaxHp: 1000,
     aiBaseMaxHp: 1000,
-    canAdvanceAge: AGE_DEFINITIONS[progress.selectedStartAge]?.advanceCost !== null,
-    advanceAgeCost: AGE_DEFINITIONS[progress.selectedStartAge]?.advanceCost ?? null,
-    unitButtons: getUnitsForAge(progress.selectedStartAge).map((unit) => ({
-      unitId: unit.id,
-      name: unit.name,
-      icon: unit.icon,
-      cost: unit.cost,
-      cooldownMs: unit.cooldownMs,
-      cooldownRemainingMs: 0,
-    })),
+    playerTurretLevel: 0,
+    playerTurretMaxLevel: getTurretMaxLevel(ageIndex),
+    playerTurretUpgradeCost: getTurretUpgradeCost(ageIndex, 0),
+    aiTurretLevel: 0,
+    aiTurretMaxLevel: getTurretMaxLevel(ageIndex),
+    canAdvanceAge: age.advanceCost !== null,
+    advanceAgeCost: age.advanceCost,
+    unitButtons: createUnitButtons(ageIndex),
     progress,
     battleMessage: 'Choose your upgrades and launch a battle.',
   };
@@ -75,20 +87,21 @@ export class GameBridge {
       }
       case 'set_start_age': {
         const progress = setSelectedStartAge(this.state.progress, command.ageIndex);
+        const ageIndex = progress.selectedStartAge;
+        const age = getAgeDefinition(ageIndex);
+
         this.setProgress(progress);
         this.patchState({
-          playerAgeIndex: progress.selectedStartAge,
-          aiAgeIndex: progress.selectedStartAge,
-          canAdvanceAge: AGE_DEFINITIONS[progress.selectedStartAge]?.advanceCost !== null,
-          advanceAgeCost: AGE_DEFINITIONS[progress.selectedStartAge]?.advanceCost ?? null,
-          unitButtons: getUnitsForAge(progress.selectedStartAge).map((unit) => ({
-            unitId: unit.id,
-            name: unit.name,
-            icon: unit.icon,
-            cost: unit.cost,
-            cooldownMs: unit.cooldownMs,
-            cooldownRemainingMs: 0,
-          })),
+          playerAgeIndex: ageIndex,
+          aiAgeIndex: ageIndex,
+          playerTurretLevel: 0,
+          playerTurretMaxLevel: getTurretMaxLevel(ageIndex),
+          playerTurretUpgradeCost: getTurretUpgradeCost(ageIndex, 0),
+          aiTurretLevel: 0,
+          aiTurretMaxLevel: getTurretMaxLevel(ageIndex),
+          canAdvanceAge: age.advanceCost !== null,
+          advanceAgeCost: age.advanceCost,
+          unitButtons: createUnitButtons(ageIndex),
         });
         return;
       }
@@ -152,6 +165,7 @@ export class GameBridge {
         return;
       }
       case 'advance_age':
+      case 'upgrade_turret':
       case 'spawn_unit': {
         if (this.state.mode !== 'playing') {
           return;

@@ -24,11 +24,30 @@ export interface BaseWeapon {
   color: number;
 }
 
+export interface TurretLevelDefinition {
+  label: string;
+  upgradeCost: number | null;
+  weapon: BaseWeapon;
+  towerColor: number;
+  turretColor: number;
+  barrelColor: number;
+}
+
+export interface AgeEconomyDefinition {
+  playerStartGoldBonus: number;
+  aiStartGoldBonus: number;
+  playerIncomeBonus: number;
+  aiIncomeBonus: number;
+  aiBaseHpBonus: number;
+}
+
 export interface AgeDefinition {
   id: AgeId;
   label: string;
   advanceCost: number | null;
-  baseWeapon: BaseWeapon;
+  unitRoster: UnitId[];
+  economy: AgeEconomyDefinition;
+  turretLevels: TurretLevelDefinition[];
   accentColor: string;
 }
 
@@ -129,8 +148,13 @@ export interface BaseState {
   hp: number;
   maxHp: number;
   weaponCooldownMs: number;
+  turretLevel: number;
   tower: Phaser.GameObjects.Rectangle;
   core: Phaser.GameObjects.Rectangle;
+  turretPivot: Phaser.GameObjects.Container;
+  turretHead: Phaser.GameObjects.Rectangle;
+  turretBarrel: Phaser.GameObjects.Rectangle;
+  turretMount: Phaser.GameObjects.Arc;
 }
 
 export interface UnitButtonState {

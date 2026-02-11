@@ -28,6 +28,11 @@ export interface GameUiState {
   aiBaseHp: number;
   playerBaseMaxHp: number;
   aiBaseMaxHp: number;
+  playerTurretLevel: number;
+  playerTurretMaxLevel: number;
+  playerTurretUpgradeCost: number | null;
+  aiTurretLevel: number;
+  aiTurretMaxLevel: number;
   canAdvanceAge: boolean;
   advanceAgeCost: number | null;
   unitButtons: UnitButtonState[];
@@ -40,6 +45,7 @@ export type GameCommand =
   | { type: 'restart_match' }
   | { type: 'spawn_unit'; unitId: UnitId }
   | { type: 'advance_age'; side: Side }
+  | { type: 'upgrade_turret'; side: Side }
   | { type: 'toggle_pause' }
   | { type: 'toggle_sound' }
   | { type: 'set_how_to'; value: boolean }
@@ -56,6 +62,11 @@ export interface BattleSnapshot {
   aiBaseHp: number;
   playerBaseMaxHp: number;
   aiBaseMaxHp: number;
+  playerTurretLevel: number;
+  playerTurretMaxLevel: number;
+  playerTurretUpgradeCost: number | null;
+  aiTurretLevel: number;
+  aiTurretMaxLevel: number;
   canAdvanceAge: boolean;
   advanceAgeCost: number | null;
   unitButtons: UnitButtonState[];

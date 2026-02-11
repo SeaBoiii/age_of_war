@@ -8,9 +8,12 @@ interface AiContext {
   getPlayerFrontX: () => number;
   getAiAdvanceCost: () => number | null;
   canAiAdvance: () => boolean;
+  getAiTurretUpgradeCost: () => number | null;
+  canAiUpgradeTurret: () => boolean;
   getRoster: () => UnitDefinition[];
   trySpawnUnit: (unitId: UnitId) => boolean;
   tryAdvanceAge: () => boolean;
+  tryUpgradeTurret: () => boolean;
 }
 
 export class AiSystem {
@@ -72,6 +75,22 @@ export class AiSystem {
       (this.saveForAgeDecisions > 0 || aiGold >= advanceCost * 1.25 || this.decisionCount % 3 === 0)
     ) {
       if (this.context.tryAdvanceAge()) {
+        return;
+      }
+    }
+
+    const turretUpgradeCost = this.context.getAiTurretUpgradeCost();
+    if (
+      this.context.canAiUpgradeTurret() &&
+      turretUpgradeCost !== null &&
+      aiGold >= turretUpgradeCost &&
+      (
+        underPressure ||
+        aiGold >= turretUpgradeCost * 1.7 ||
+        (this.decisionCount % 4 === 0 && aiGold >= turretUpgradeCost * 1.1)
+      )
+    ) {
+      if (this.context.tryUpgradeTurret()) {
         return;
       }
     }

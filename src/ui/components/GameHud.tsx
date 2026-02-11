@@ -22,8 +22,14 @@ export function GameHud({ state }: GameHudProps) {
             <span className="rounded-md bg-indigo-400/20 px-2 py-1 text-indigo-100">
               Age: {AGE_DEFINITIONS[state.playerAgeIndex]?.label}
             </span>
+            <span className="rounded-md bg-sky-400/20 px-2 py-1 text-sky-100">
+              Turret: {state.playerTurretLevel + 1}/{state.playerTurretMaxLevel + 1}
+            </span>
             <span className="hidden rounded-md bg-cyan-400/20 px-2 py-1 text-cyan-100 sm:inline">
               Enemy Age: {AGE_DEFINITIONS[state.aiAgeIndex]?.label}
+            </span>
+            <span className="hidden rounded-md bg-rose-400/20 px-2 py-1 text-rose-100 md:inline">
+              Enemy Turret: {state.aiTurretLevel + 1}/{state.aiTurretMaxLevel + 1}
             </span>
           </div>
 

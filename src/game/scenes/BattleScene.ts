@@ -1,5 +1,12 @@
 ﻿import Phaser from 'phaser';
-import { canAdvanceAge, getAgeDefinition } from '../constants/ages';
+import {
+  canAdvanceAge,
+  canUpgradeTurret,
+  getAgeDefinition,
+  getTurretLevelDefinition,
+  getTurretMaxLevel,
+  getTurretUpgradeCost,
+} from '../constants/ages';
 import {
   AI_BASE_X,
   BASE_BASE_HP,
@@ -25,6 +32,7 @@ import { ProjectileSystem } from '../systems/ProjectileSystem';
 import { UnitSystem } from '../systems/UnitSystem';
 
 const BGM_KEY = 'bgm_glorious_morning';
+const TURRET_TURN_SPEED_RAD_PER_SECOND = 4.8;
 
 export class BattleScene extends Phaser.Scene {
   private readonly bridge: GameBridge;
@@ -48,6 +56,8 @@ export class BattleScene extends Phaser.Scene {
   private playerIncomePerSecond = BASE_PASSIVE_INCOME_PER_SECOND;
 
   private aiIncomePerSecond = BASE_PASSIVE_INCOME_PER_SECOND;
+
+  private playerIncomeMetaBonus = 0;
 
   private playerAgeIndex = 0;
 
@@ -94,6 +104,14 @@ export class BattleScene extends Phaser.Scene {
     this.playerBase = this.createBase('player');
     this.aiBase = this.createBase('ai');
 
+    const selectedStartAge = this.bridge.getState().progress.selectedStartAge;
+    this.playerAgeIndex = selectedStartAge;
+    this.aiAgeIndex = selectedStartAge;
+    this.playerBase.turretLevel = 0;
+    this.aiBase.turretLevel = 0;
+    this.updateBaseVisual('player');
+    this.updateBaseVisual('ai');
+
     this.projectileSystem = new ProjectileSystem({
       scene: this,
       getUnits: () => this.unitSystem.getAll(),
@@ -135,9 +153,12 @@ export class BattleScene extends Phaser.Scene {
       getPlayerFrontX: () => this.getFrontX('player'),
       getAiAdvanceCost: () => getAgeDefinition(this.aiAgeIndex).advanceCost,
       canAiAdvance: () => canAdvanceAge(this.aiAgeIndex),
+      getAiTurretUpgradeCost: () => getTurretUpgradeCost(this.aiAgeIndex, this.aiBase.turretLevel),
+      canAiUpgradeTurret: () => canUpgradeTurret(this.aiAgeIndex, this.aiBase.turretLevel),
       getRoster: () => getUnitsForAge(this.aiAgeIndex),
       trySpawnUnit: (unitId) => this.trySpawnUnit('ai', unitId),
       tryAdvanceAge: () => this.tryAdvanceAge('ai'),
+      tryUpgradeTurret: () => this.tryUpgradeTurret('ai'),
     });
 
     window.addEventListener(USER_GESTURE_EVENT, this.userGestureListener);
@@ -211,6 +232,18 @@ export class BattleScene extends Phaser.Scene {
         }
         break;
       }
+      case 'upgrade_turret': {
+        if (!this.matchRunning || this.paused) {
+          break;
+        }
+
+        const upgraded = this.tryUpgradeTurret(command.side);
+        if (!upgraded && command.side === 'player') {
+          this.battleMessage = 'Cannot upgrade turret right now.';
+          this.syncHudSnapshot(true);
+        }
+        break;
+      }
       case 'toggle_pause': {
         this.paused = !this.paused;
         this.syncHudSnapshot(true);
@@ -235,32 +268,40 @@ export class BattleScene extends Phaser.Scene {
     this.playerAgeIndex = progress.selectedStartAge;
     this.aiAgeIndex = progress.selectedStartAge;
 
+    const startAge = getAgeDefinition(progress.selectedStartAge);
     const playerMaxBaseHp = BASE_BASE_HP + progress.meta.baseHpLevel * 90;
-    const aiMaxBaseHp = BASE_BASE_HP + progress.selectedStartAge * 30;
+    const aiMaxBaseHp = BASE_BASE_HP + startAge.economy.aiBaseHpBonus;
 
     this.playerBase.maxHp = playerMaxBaseHp;
     this.playerBase.hp = playerMaxBaseHp;
     this.aiBase.maxHp = aiMaxBaseHp;
     this.aiBase.hp = aiMaxBaseHp;
 
-    this.playerGold = PLAYER_GOLD_ON_START + progress.selectedStartAge * 80;
-    this.aiGold = AI_GOLD_ON_START + progress.selectedStartAge * 80;
+    this.playerGold = PLAYER_GOLD_ON_START + startAge.economy.playerStartGoldBonus;
+    this.aiGold = AI_GOLD_ON_START + startAge.economy.aiStartGoldBonus;
 
-    this.playerIncomePerSecond = BASE_PASSIVE_INCOME_PER_SECOND + progress.meta.incomeLevel * 2;
-    this.aiIncomePerSecond = BASE_PASSIVE_INCOME_PER_SECOND + progress.selectedStartAge * 1.4;
+    this.playerIncomeMetaBonus = progress.meta.incomeLevel * 2;
+    this.refreshIncomeRates();
 
     this.playerCooldowns = new Map<UnitId, number>();
     this.aiCooldowns = new Map<UnitId, number>();
-    for (const unit of Object.values(getUnitsForAge(this.playerAgeIndex))) {
+
+    for (const unit of getUnitsForAge(this.playerAgeIndex)) {
       this.playerCooldowns.set(unit.id, 0);
+    }
+    for (const unit of getUnitsForAge(this.aiAgeIndex)) {
       this.aiCooldowns.set(unit.id, 0);
     }
 
+    this.playerBase.turretLevel = 0;
+    this.aiBase.turretLevel = 0;
     this.playerBase.weaponCooldownMs = 0;
     this.aiBase.weaponCooldownMs = 0;
 
     this.updateBaseVisual('player');
     this.updateBaseVisual('ai');
+    this.rotateTurretToIdle(this.playerBase, FIXED_STEP_MS);
+    this.rotateTurretToIdle(this.aiBase, FIXED_STEP_MS);
 
     this.paused = false;
     this.matchRunning = true;
@@ -298,22 +339,30 @@ export class BattleScene extends Phaser.Scene {
     }
   }
 
+  private refreshIncomeRates(): void {
+    const playerAge = getAgeDefinition(this.playerAgeIndex);
+    const aiAge = getAgeDefinition(this.aiAgeIndex);
+
+    this.playerIncomePerSecond =
+      BASE_PASSIVE_INCOME_PER_SECOND +
+      this.playerIncomeMetaBonus +
+      playerAge.economy.playerIncomeBonus;
+
+    this.aiIncomePerSecond = BASE_PASSIVE_INCOME_PER_SECOND + aiAge.economy.aiIncomeBonus;
+  }
+
   private updateBaseAttacks(deltaMs: number): void {
     this.playerBase.weaponCooldownMs -= deltaMs;
     this.aiBase.weaponCooldownMs -= deltaMs;
 
-    this.tryBaseAttack('player');
-    this.tryBaseAttack('ai');
+    this.tryBaseAttack('player', deltaMs);
+    this.tryBaseAttack('ai', deltaMs);
   }
 
-  private tryBaseAttack(side: Side): void {
+  private tryBaseAttack(side: Side, deltaMs: number): void {
     const base = this.getHomeBase(side);
-    if (base.weaponCooldownMs > 0) {
-      return;
-    }
-
     const ageIndex = side === 'player' ? this.playerAgeIndex : this.aiAgeIndex;
-    const weapon = getAgeDefinition(ageIndex).baseWeapon;
+    const weapon = getTurretLevelDefinition(ageIndex, base.turretLevel).weapon;
 
     const enemyTarget = this.unitSystem
       .getAll()
@@ -322,15 +371,23 @@ export class BattleScene extends Phaser.Scene {
       .find((unit) => Math.abs(unit.x - base.x) <= weapon.range);
 
     if (!enemyTarget) {
+      this.rotateTurretToIdle(base, deltaMs);
       return;
     }
 
-    const direction = side === 'player' ? 1 : -1;
+    this.rotateTurretTowards(base, enemyTarget.x, enemyTarget.y, deltaMs);
+
+    if (base.weaponCooldownMs > 0) {
+      return;
+    }
+
+    const muzzle = this.getTurretMuzzlePosition(base);
+
     this.projectileSystem.spawn({
       side,
       sourceUnitId: 'base',
-      x: base.x + direction * 44,
-      y: LANE_Y - 66,
+      x: muzzle.x,
+      y: muzzle.y,
       targetX: enemyTarget.x,
       targetY: enemyTarget.y,
       damage: weapon.damage,
@@ -397,13 +454,54 @@ export class BattleScene extends Phaser.Scene {
     if (isPlayer) {
       this.playerGold -= advanceCost;
       this.playerAgeIndex += 1;
+      this.playerBase.turretLevel = 0;
+      this.playerBase.weaponCooldownMs = 0;
       this.bridge.unlockAge(this.playerAgeIndex);
       this.battleMessage = `Advanced to ${getAgeDefinition(this.playerAgeIndex).label}.`;
       this.updateBaseVisual('player');
+      this.rotateTurretToIdle(this.playerBase, FIXED_STEP_MS);
     } else {
       this.aiGold -= advanceCost;
       this.aiAgeIndex += 1;
+      this.aiBase.turretLevel = 0;
+      this.aiBase.weaponCooldownMs = 0;
       this.updateBaseVisual('ai');
+      this.rotateTurretToIdle(this.aiBase, FIXED_STEP_MS);
+    }
+
+    this.refreshIncomeRates();
+    return true;
+  }
+
+  private tryUpgradeTurret(side: Side): boolean {
+    const base = this.getHomeBase(side);
+    const ageIndex = side === 'player' ? this.playerAgeIndex : this.aiAgeIndex;
+    const upgradeCost = getTurretUpgradeCost(ageIndex, base.turretLevel);
+
+    if (upgradeCost === null) {
+      return false;
+    }
+
+    if (side === 'player') {
+      if (this.playerGold < upgradeCost) {
+        return false;
+      }
+      this.playerGold -= upgradeCost;
+    } else {
+      if (this.aiGold < upgradeCost) {
+        return false;
+      }
+      this.aiGold -= upgradeCost;
+    }
+
+    base.turretLevel += 1;
+    base.weaponCooldownMs = 0;
+    this.updateBaseVisual(side);
+
+    if (side === 'player') {
+      const turretLevel = getTurretLevelDefinition(ageIndex, base.turretLevel);
+      this.battleMessage = `Turret upgraded to ${turretLevel.label}.`;
+      this.syncHudSnapshot(true);
     }
 
     return true;
@@ -468,6 +566,30 @@ export class BattleScene extends Phaser.Scene {
     }
   }
 
+  private rotateTurretTowards(base: BaseState, targetX: number, targetY: number, deltaMs: number): void {
+    const desiredAngle = Phaser.Math.Angle.Between(base.turretPivot.x, base.turretPivot.y, targetX, targetY);
+    const angleDelta = Phaser.Math.Angle.Wrap(desiredAngle - base.turretPivot.rotation);
+    const maxStep = TURRET_TURN_SPEED_RAD_PER_SECOND * (deltaMs / 1000);
+
+    base.turretPivot.setRotation(
+      base.turretPivot.rotation + Phaser.Math.Clamp(angleDelta, -maxStep, maxStep),
+    );
+  }
+
+  private rotateTurretToIdle(base: BaseState, deltaMs: number): void {
+    const direction = base.side === 'player' ? 1 : -1;
+    this.rotateTurretTowards(base, base.turretPivot.x + direction * 220, base.turretPivot.y, deltaMs);
+  }
+
+  private getTurretMuzzlePosition(base: BaseState): { x: number; y: number } {
+    const barrelLength = base.turretBarrel.width * base.turretBarrel.scaleX * 0.85;
+
+    return {
+      x: base.turretPivot.x + Math.cos(base.turretPivot.rotation) * barrelLength,
+      y: base.turretPivot.y + Math.sin(base.turretPivot.rotation) * barrelLength,
+    };
+  }
+
   private getHomeBase(side: Side): BaseState {
     return side === 'player' ? this.playerBase : this.aiBase;
   }
@@ -513,6 +635,11 @@ export class BattleScene extends Phaser.Scene {
       aiBaseHp: this.aiBase.hp,
       playerBaseMaxHp: this.playerBase.maxHp,
       aiBaseMaxHp: this.aiBase.maxHp,
+      playerTurretLevel: this.playerBase.turretLevel,
+      playerTurretMaxLevel: getTurretMaxLevel(this.playerAgeIndex),
+      playerTurretUpgradeCost: getTurretUpgradeCost(this.playerAgeIndex, this.playerBase.turretLevel),
+      aiTurretLevel: this.aiBase.turretLevel,
+      aiTurretMaxLevel: getTurretMaxLevel(this.aiAgeIndex),
       canAdvanceAge: playerAge.advanceCost !== null,
       advanceAgeCost: playerAge.advanceCost,
       unitButtons,
@@ -531,11 +658,27 @@ export class BattleScene extends Phaser.Scene {
 
   private createBase(side: Side): BaseState {
     const x = side === 'player' ? PLAYER_BASE_X : AI_BASE_X;
+
     const core = this.add.rectangle(x, LANE_Y + 20, 126, 210, 0x334155, 1);
+    core.setStrokeStyle(2, 0x0f172a, 0.55);
     core.setDepth(4);
 
     const tower = this.add.rectangle(x, LANE_Y - 95, 72, 130, 0xf59e0b, 1);
+    tower.setStrokeStyle(2, 0x0f172a, 0.7);
     tower.setDepth(6);
+
+    const turretMount = this.add.circle(0, 12, 14, 0x94a3b8, 1);
+    turretMount.setStrokeStyle(1, 0x0f172a, 0.6);
+
+    const turretHead = this.add.rectangle(0, 0, 34, 24, 0xcbd5e1, 1);
+    turretHead.setStrokeStyle(1, 0x0f172a, 0.7);
+
+    const turretBarrel = this.add.rectangle(24, 0, 40, 9, 0xe2e8f0, 1).setOrigin(0.15, 0.5);
+    turretBarrel.setStrokeStyle(1, 0x0f172a, 0.6);
+
+    const turretPivot = this.add.container(x, LANE_Y - 158, [turretMount, turretHead, turretBarrel]);
+    turretPivot.setDepth(8);
+    turretPivot.setRotation(side === 'player' ? 0 : Math.PI);
 
     return {
       side,
@@ -543,20 +686,39 @@ export class BattleScene extends Phaser.Scene {
       hp: BASE_BASE_HP,
       maxHp: BASE_BASE_HP,
       weaponCooldownMs: 0,
+      turretLevel: 0,
       tower,
       core,
+      turretPivot,
+      turretHead,
+      turretBarrel,
+      turretMount,
     };
   }
 
   private updateBaseVisual(side: Side): void {
     const base = this.getHomeBase(side);
     const age = getAgeDefinition(side === 'player' ? this.playerAgeIndex : this.aiAgeIndex);
+    const turretLevel = getTurretLevelDefinition(
+      side === 'player' ? this.playerAgeIndex : this.aiAgeIndex,
+      base.turretLevel,
+    );
 
-    const tint = Number.parseInt(age.accentColor.replace('#', ''), 16);
+    const accentTint = Number.parseInt(age.accentColor.replace('#', ''), 16);
     const alpha = side === 'player' ? 0.9 : 0.8;
 
-    base.tower.setFillStyle(tint, alpha);
+    base.tower.setFillStyle(turretLevel.towerColor, alpha);
+    base.tower.setStrokeStyle(2, accentTint, 0.7);
     base.core.setFillStyle(side === 'player' ? 0x1f2937 : 0x334155, 1);
+
+    base.turretMount.setFillStyle(turretLevel.towerColor, 0.92);
+    base.turretHead.setFillStyle(turretLevel.turretColor, 1);
+    base.turretBarrel.setFillStyle(turretLevel.barrelColor, 1);
+
+    const headScale = 1 + base.turretLevel * 0.06;
+    const barrelScale = 1 + base.turretLevel * 0.08;
+    base.turretHead.setScale(headScale, headScale);
+    base.turretBarrel.setScale(barrelScale, 1);
   }
 
   private ensureBgmPlaying(): void {
