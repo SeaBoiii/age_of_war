@@ -111,6 +111,16 @@ const TURRET_BARREL_COLORS: Record<AgeId, [number, number, number]> = {
   astral: [0xe0e7ff, 0xf5f3ff, 0xf8fafc],
 };
 
+const MAX_TURRET_RANGE_TO_CENTER = 660;
+
+const TURRET_BASE_RANGE_BY_AGE: Record<AgeId, number> = {
+  hearth: 300,
+  arcane: 380,
+  beast: 470,
+  runeforge: 560,
+  astral: 620,
+};
+
 const EXTERNAL_UNIT_ID_ALIASES: Record<string, UnitId> = {
   militia_swordsman: 'swordsman',
   hedge_archer: 'archer',
@@ -414,6 +424,14 @@ function createTurretLevels(ageId: AgeId, rawWeapon: RawBaseWeaponConfig): Turre
   const baseWeapon = resolveBaseWeapon(rawWeapon);
   const mk2Weapon = scaleWeapon(baseWeapon, 1);
   const mk3Weapon = scaleWeapon(baseWeapon, 2);
+
+  const baseRange = TURRET_BASE_RANGE_BY_AGE[ageId];
+  const mk2Range = Math.min(MAX_TURRET_RANGE_TO_CENTER, baseRange + 25);
+  const mk3Range = Math.min(MAX_TURRET_RANGE_TO_CENTER, baseRange + 45);
+
+  baseWeapon.range = baseRange;
+  mk2Weapon.range = mk2Range;
+  mk3Weapon.range = mk3Range;
 
   const upgradeCost = Math.max(100, Math.round(asNumber(rawWeapon.upgradeCost, 350)));
   const mk2Cost = Math.max(upgradeCost + 80, Math.round(upgradeCost * 1.42));

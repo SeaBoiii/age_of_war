@@ -269,7 +269,7 @@ export class BattleScene extends Phaser.Scene {
     this.aiAgeIndex = progress.selectedStartAge;
 
     const startAge = getAgeDefinition(progress.selectedStartAge);
-    const playerMaxBaseHp = BASE_BASE_HP + progress.meta.baseHpLevel * 90;
+    const playerMaxBaseHp = BASE_BASE_HP;
     const aiMaxBaseHp = BASE_BASE_HP + startAge.economy.aiBaseHpBonus;
 
     this.playerBase.maxHp = playerMaxBaseHp;
@@ -280,7 +280,8 @@ export class BattleScene extends Phaser.Scene {
     this.playerGold = PLAYER_GOLD_ON_START + startAge.economy.playerStartGoldBonus;
     this.aiGold = AI_GOLD_ON_START + startAge.economy.aiStartGoldBonus;
 
-    this.playerIncomeMetaBonus = progress.meta.incomeLevel * 2;
+    // Meta upgrades are currently KIV in UI, so keep match economy neutral.
+    this.playerIncomeMetaBonus = 0;
     this.refreshIncomeRates();
 
     this.playerCooldowns = new Map<UnitId, number>();
