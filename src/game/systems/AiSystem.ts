@@ -101,16 +101,16 @@ const MODE_ACTION_WEIGHTS: Record<StrategyMode, Record<AiActionKind, number>> = 
     hold: 25,
   },
   stabilize: {
-    advance_age: 145,
+    advance_age: 165,
     upgrade_turret: 130,
     spawn_frontline: 140,
     spawn_ranged: 125,
     spawn_duo: 150,
     spawn_cheapest: 100,
-    hold: 60,
+    hold: 78,
   },
   tech: {
-    advance_age: 245,
+    advance_age: 265,
     upgrade_turret: 95,
     spawn_frontline: 105,
     spawn_ranged: 110,
@@ -119,13 +119,13 @@ const MODE_ACTION_WEIGHTS: Record<StrategyMode, Record<AiActionKind, number>> = 
     hold: 135,
   },
   pressure: {
-    advance_age: 165,
+    advance_age: 230,
     upgrade_turret: 85,
-    spawn_frontline: 130,
-    spawn_ranged: 155,
-    spawn_duo: 185,
-    spawn_cheapest: 85,
-    hold: 45,
+    spawn_frontline: 112,
+    spawn_ranged: 130,
+    spawn_duo: 148,
+    spawn_cheapest: 70,
+    hold: 95,
   },
 };
 
@@ -254,7 +254,11 @@ export class AiSystem {
     } else if (
       snapshot.canAdvance &&
       snapshot.advanceCost !== null &&
-      snapshot.aiGold >= snapshot.advanceCost * 0.58 &&
+      snapshot.aiGold >=
+        snapshot.advanceCost *
+          (snapshot.laneAdvantage >= pressureLaneThreshold || snapshot.enemyBaseHpRatio <= 0.58
+            ? 0.46
+            : 0.58) &&
       snapshot.laneAdvantage > -110
     ) {
       proposed = 'tech';
@@ -367,6 +371,13 @@ export class AiSystem {
     const rangedNeed = Math.max(0, snapshot.ally.frontline - snapshot.ally.ranged);
     const lane = snapshot.laneAdvantage;
     const hpRisk = (1 - snapshot.aiBaseHpRatio) * 130;
+    const advanceCost = snapshot.advanceCost ?? 0;
+    const canAdvanceSoon = snapshot.canAdvance && snapshot.advanceCost !== null;
+    const goldRemainingToAdvance = canAdvanceSoon ? Math.max(0, advanceCost - snapshot.aiGold) : Infinity;
+    const hasLaneControl =
+      snapshot.laneAdvantage >= this.behavior.pressureModeThreshold || snapshot.enemyBaseHpRatio <= 0.62;
+    const shouldBankForAge =
+      canAdvanceSoon && hasLaneControl && goldRemainingToAdvance <= advanceCost * 0.7;
 
     let score = MODE_ACTION_WEIGHTS[mode][candidate.kind];
     score -= this.actionRepeatPenalty(candidate.kind);
@@ -383,6 +394,9 @@ export class AiSystem {
         score += lane > 120 ? 24 : lane < -120 ? -32 : 6;
         score -= snapshot.underPressure ? 65 : 0;
         score -= snapshot.aiBaseHpRatio < 0.45 ? 45 : 0;
+        score += hasLaneControl ? 48 : 0;
+        score += shouldBankForAge ? 56 : 0;
+        score += snapshot.advanceCost !== null && snapshot.aiGold >= snapshot.advanceCost ? 70 : 0;
         break;
       }
       case 'upgrade_turret': {
@@ -407,6 +421,7 @@ export class AiSystem {
         score += snapshot.underPressure ? 34 : 0;
         score += lane < -80 ? 22 : 0;
         score += this.lastSpawnRole === 'ranged' ? 10 : 0;
+        score -= shouldBankForAge ? 46 : 0;
         break;
       }
       case 'spawn_ranged': {
@@ -419,6 +434,7 @@ export class AiSystem {
         score += lane > 80 ? 18 : 0;
         score -= snapshot.underPressure && snapshot.ally.frontline < snapshot.enemy.frontline ? 40 : 0;
         score += this.lastSpawnRole === 'frontline' ? 10 : 0;
+        score -= shouldBankForAge ? 52 : 0;
         break;
       }
       case 'spawn_duo': {
@@ -431,6 +447,7 @@ export class AiSystem {
         score += pairPower * 0.18;
         score += frontlineNeed > 0 || rangedNeed > 0 ? 30 : 10;
         score += snapshot.underPressure ? 16 : 0;
+        score -= shouldBankForAge ? 68 : 0;
         break;
       }
       case 'spawn_cheapest': {
@@ -440,6 +457,7 @@ export class AiSystem {
 
         score += this.estimateUnitPower(candidate.primaryUnit) * 0.12;
         score += snapshot.underPressure ? 12 : 0;
+        score -= shouldBankForAge ? 40 : 0;
         break;
       }
       case 'hold': {
@@ -454,6 +472,8 @@ export class AiSystem {
 
         score += lane > 90 ? 8 : 0;
         score -= snapshot.underPressure ? 62 : 0;
+        score += shouldBankForAge ? 42 : 0;
+        score += hasLaneControl && canAdvanceSoon ? 16 : 0;
         break;
       }
       default:
@@ -473,6 +493,10 @@ export class AiSystem {
       }
 
       score -= candidate.cost * 0.04;
+
+      if (shouldBankForAge && candidate.kind !== 'advance_age' && candidate.kind !== 'hold') {
+        score -= 32 + candidate.cost * 0.015;
+      }
     }
 
     if (
@@ -498,6 +522,13 @@ export class AiSystem {
 
   private computeLookaheadScore(candidate: ActionCandidate, snapshot: TacticalSnapshot, mode: StrategyMode): number {
     const horizonSec = 3.2;
+    const advanceCost = snapshot.advanceCost ?? 0;
+    const canAdvanceSoon = snapshot.canAdvance && snapshot.advanceCost !== null;
+    const goldRemainingToAdvance = canAdvanceSoon ? Math.max(0, advanceCost - snapshot.aiGold) : Infinity;
+    const hasLaneControl =
+      snapshot.laneAdvantage >= this.behavior.pressureModeThreshold || snapshot.enemyBaseHpRatio <= 0.62;
+    const shouldBankForAge =
+      canAdvanceSoon && hasLaneControl && goldRemainingToAdvance <= advanceCost * 0.7;
     const laneMomentumFromForces =
       (snapshot.ally.frontline - snapshot.enemy.frontline) * 14 +
       (snapshot.ally.ranged - snapshot.enemy.ranged) * 9 +
@@ -547,6 +578,20 @@ export class AiSystem {
 
     if (candidate.kind === 'advance_age' && snapshot.underPressure && projectedLane < 40) {
       score -= 30;
+    }
+
+    if (candidate.kind === 'advance_age' && hasLaneControl) {
+      score += 24;
+    }
+
+    if (
+      shouldBankForAge &&
+      (candidate.kind === 'spawn_frontline' ||
+        candidate.kind === 'spawn_ranged' ||
+        candidate.kind === 'spawn_duo' ||
+        candidate.kind === 'spawn_cheapest')
+    ) {
+      score -= 26;
     }
 
     return score;

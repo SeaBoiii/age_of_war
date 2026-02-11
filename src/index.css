@@ -1,24 +1,177 @@
-﻿@import "tailwindcss";
+@import "tailwindcss";
 
 :root {
   color-scheme: only light;
-  font-family: "Trebuchet MS", "Segoe UI", Tahoma, sans-serif;
+  --ui-ink: #f2f6ff;
+  --ui-muted: #9db0cf;
+  --ui-border: rgba(168, 194, 233, 0.34);
+  --ui-surface: rgba(12, 23, 41, 0.72);
+  --ui-surface-strong: rgba(7, 14, 29, 0.86);
+  --ui-accent: #7dc3ff;
+  --ui-warm: #f8c26e;
+  --font-body: "Avenir Next", "Trebuchet MS", "Segoe UI", Tahoma, sans-serif;
+  --font-display: "Palatino Linotype", "Book Antiqua", "Garamond", serif;
+  font-family: var(--font-body);
 }
 
 body {
   margin: 0;
   min-height: 100vh;
+  position: relative;
   background:
-    radial-gradient(circle at 15% 20%, rgba(255, 186, 73, 0.18), transparent 32%),
-    radial-gradient(circle at 80% 10%, rgba(61, 185, 255, 0.14), transparent 36%),
-    linear-gradient(160deg, #101827 0%, #121f3b 52%, #0f1d26 100%);
-  color: #eef5ff;
+    radial-gradient(circle at 15% 20%, rgba(255, 186, 73, 0.19), transparent 35%),
+    radial-gradient(circle at 80% 10%, rgba(86, 179, 255, 0.16), transparent 38%),
+    linear-gradient(160deg, #0f182a 0%, #13223f 47%, #0e1d2d 100%);
+  color: var(--ui-ink);
 }
 
 #root {
   min-height: 100vh;
 }
 
+body::before,
+body::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+}
+
+body::before {
+  background:
+    linear-gradient(
+      120deg,
+      rgba(255, 255, 255, 0.03) 0%,
+      rgba(255, 255, 255, 0) 30%,
+      rgba(255, 255, 255, 0.02) 50%,
+      rgba(255, 255, 255, 0) 70%
+    );
+  animation: driftGlow 18s ease-in-out infinite;
+}
+
+body::after {
+  background:
+    repeating-linear-gradient(
+      135deg,
+      rgba(166, 189, 234, 0.025) 0px,
+      rgba(166, 189, 234, 0.025) 1px,
+      transparent 1px,
+      transparent 14px
+    );
+  mix-blend-mode: screen;
+  opacity: 0.55;
+}
+
 button {
   cursor: pointer;
+}
+
+button:focus-visible,
+input:focus-visible,
+select:focus-visible {
+  outline: 2px solid rgba(136, 214, 255, 0.82);
+  outline-offset: 2px;
+}
+
+.ui-title {
+  font-family: var(--font-display);
+  letter-spacing: 0.04em;
+}
+
+.ui-glass-panel {
+  border: 1px solid var(--ui-border);
+  background: linear-gradient(170deg, rgba(16, 30, 52, 0.84), rgba(9, 18, 35, 0.74));
+  box-shadow:
+    0 24px 56px rgba(2, 6, 14, 0.48),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(12px);
+}
+
+.ui-soft-panel {
+  border: 1px solid rgba(173, 196, 237, 0.25);
+  background: linear-gradient(165deg, rgba(19, 35, 61, 0.74), rgba(11, 21, 40, 0.58));
+}
+
+.ui-tag {
+  border: 1px solid rgba(161, 192, 244, 0.32);
+  background: rgba(99, 141, 212, 0.17);
+  color: #dce8ff;
+}
+
+.ui-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(196, 211, 241, 0.34);
+  border-radius: 10px;
+  background: rgba(31, 48, 78, 0.56);
+  color: #edf4ff;
+  transition: transform 140ms ease, background-color 140ms ease, border-color 140ms ease;
+}
+
+.ui-icon-btn:hover {
+  transform: translateY(-1px);
+  background: rgba(52, 77, 121, 0.64);
+  border-color: rgba(214, 226, 250, 0.46);
+}
+
+.ui-audio-slider {
+  width: 100%;
+  accent-color: #80d1ff;
+  height: 4px;
+  border-radius: 999px;
+}
+
+.ui-fade-up {
+  animation: fadeUp 260ms ease;
+}
+
+.ui-pop {
+  animation: popIn 220ms ease;
+}
+
+.ui-shadow-warm {
+  box-shadow:
+    0 0 0 1px rgba(253, 203, 120, 0.25),
+    0 10px 28px rgba(233, 155, 47, 0.26);
+}
+
+.ui-shadow-cool {
+  box-shadow:
+    0 0 0 1px rgba(120, 193, 252, 0.22),
+    0 10px 28px rgba(38, 128, 230, 0.22);
+}
+
+@keyframes fadeUp {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes popIn {
+  from {
+    opacity: 0;
+    transform: scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes driftGlow {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0);
+    opacity: 0.74;
+  }
+  50% {
+    transform: translate3d(1.5%, -1.2%, 0);
+    opacity: 0.9;
+  }
 }

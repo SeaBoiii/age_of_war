@@ -163,6 +163,7 @@ export interface UnitButtonState {
   unitId: UnitId;
   name: string;
   icon: string;
+  color: number;
   cost: number;
   spawnRateMs: number;
   queuedCount: number;

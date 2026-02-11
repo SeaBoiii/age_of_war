@@ -192,11 +192,11 @@ export class BattleScene extends Phaser.Scene {
         debugLog: (message) => this.debugLog(`AI ${message}`),
       },
       {
-        aggression: 0.95,
-        techFocus: 1,
-        defenseFocus: 1.08,
-        holdPreference: 1.08,
-        pressureModeThreshold: 180,
+        aggression: 0.86,
+        techFocus: 1.35,
+        defenseFocus: 1.05,
+        holdPreference: 1.24,
+        pressureModeThreshold: 210,
       },
     );
 
@@ -698,8 +698,6 @@ export class BattleScene extends Phaser.Scene {
     unit.alive = false;
     if (attackerSide === 'player') {
       this.playerGold += Math.ceil(unit.def.cost * PLAYER_KILL_BOUNTY_MULTIPLIER);
-    } else {
-      this.aiGold += unit.def.bounty;
     }
   }
 
@@ -838,6 +836,7 @@ export class BattleScene extends Phaser.Scene {
       unitId: unit.id,
       name: unit.name,
       icon: unit.icon,
+      color: unit.color,
       cost: unit.cost,
       spawnRateMs: unit.cooldownMs,
       queuedCount: queueCountByUnit.get(unit.id) ?? 0,
@@ -859,6 +858,7 @@ export class BattleScene extends Phaser.Scene {
       aiTurretMaxLevel: getTurretMaxLevel(this.aiAgeIndex),
       playerQueueCount: this.playerSpawnQueue.length,
       playerQueueLimit: MAX_SPAWN_QUEUE,
+      playerQueuePreview: this.playerSpawnQueue.map((entry) => entry.unitId),
       aiQueueCount: this.aiSpawnQueue.length,
       aiQueueLimit: MAX_SPAWN_QUEUE,
       canAdvanceAge: playerAge.advanceCost !== null,

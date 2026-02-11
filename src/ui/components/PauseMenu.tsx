@@ -1,6 +1,7 @@
 import { gameBridge } from '../../state/gameBridge';
 import { emitUserGesture } from '../../state/interactionEvents';
 import type { GameUiState } from '../../state/types';
+import { HomeIcon, PlayIcon, VolumeOffIcon, VolumeOnIcon } from './UiIcons';
 
 interface PauseMenuProps {
   state: GameUiState;
@@ -17,29 +18,30 @@ export function PauseMenu({ state }: PauseMenuProps) {
       onClick={resumeMatch}
     >
       <div
-        className="w-full max-w-sm rounded-xl border border-white/20 bg-slate-900/90 p-4 shadow-2xl sm:p-5"
+        className="ui-glass-panel ui-pop w-full max-w-sm rounded-xl p-4 sm:p-5"
         onClick={(event) => {
           event.stopPropagation();
         }}
       >
-        <h2 className="text-lg font-bold text-slate-100 sm:text-xl">Game Paused</h2>
-        <p className="mt-1 text-xs text-slate-300">Press Esc or click outside to resume.</p>
+        <h2 className="ui-title text-lg font-bold text-slate-100 sm:text-xl">Game Paused</h2>
+        <p className="mt-1 text-xs text-slate-300">Press Esc or click outside this panel to resume.</p>
 
         <div className="mt-4 flex flex-col gap-3">
           <button
             type="button"
-            className="rounded-md border border-emerald-300/40 bg-emerald-400/20 px-3 py-2 text-sm font-semibold text-emerald-100 transition hover:bg-emerald-300/30"
+            className="inline-flex items-center justify-center gap-2 rounded-md border border-emerald-300/40 bg-emerald-400/20 px-3 py-2 text-sm font-semibold text-emerald-100 transition hover:-translate-y-0.5 hover:bg-emerald-300/30"
             onClick={resumeMatch}
           >
+            <PlayIcon className="h-4 w-4" />
             Resume
           </button>
 
-          <div className="rounded-md border border-white/20 bg-slate-800/70 px-3 py-2">
+          <div className="ui-soft-panel rounded-md px-3 py-2">
             <div className="flex items-center justify-between gap-2">
-              <span className="text-xs uppercase tracking-wider text-slate-400">Audio</span>
+              <span className="text-xs uppercase tracking-wider text-slate-300">Audio</span>
               <button
                 type="button"
-                className="rounded-md border border-white/30 bg-slate-700/60 px-3 py-1 text-xs text-slate-100 transition hover:bg-slate-600/70"
+                className="ui-icon-btn h-8 w-8"
                 aria-label={state.soundOn ? 'Mute sound' : 'Unmute sound'}
                 title={state.soundOn ? 'Mute sound' : 'Unmute sound'}
                 onClick={() => {
@@ -47,7 +49,7 @@ export function PauseMenu({ state }: PauseMenuProps) {
                   gameBridge.dispatch({ type: 'toggle_sound' });
                 }}
               >
-                {state.soundOn ? '🔊' : '🔇'}
+                {state.soundOn ? <VolumeOnIcon className="h-4 w-4" /> : <VolumeOffIcon className="h-4 w-4" />}
               </button>
             </div>
 
@@ -59,7 +61,7 @@ export function PauseMenu({ state }: PauseMenuProps) {
                 max={100}
                 step={1}
                 value={Math.round(state.soundVolume * 100)}
-                className="w-full accent-cyan-400"
+                className="ui-audio-slider"
                 onChange={(event) => {
                   emitUserGesture();
                   gameBridge.dispatch({
@@ -73,9 +75,10 @@ export function PauseMenu({ state }: PauseMenuProps) {
 
           <button
             type="button"
-            className="mt-8 rounded-md border border-rose-300/40 bg-rose-500/20 px-3 py-2 text-sm font-semibold text-rose-100 transition hover:bg-rose-400/30"
+            className="mt-9 inline-flex items-center justify-center gap-2 rounded-md border border-rose-300/40 bg-rose-500/20 px-3 py-2 text-sm font-semibold text-rose-100 transition hover:-translate-y-0.5 hover:bg-rose-400/30"
             onClick={() => gameBridge.dispatch({ type: 'return_to_menu' })}
           >
+            <HomeIcon className="h-4 w-4" />
             Quit Game
           </button>
         </div>

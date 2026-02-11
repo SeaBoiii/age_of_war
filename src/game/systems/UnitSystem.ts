@@ -1,6 +1,11 @@
 ﻿import Phaser from 'phaser';
-import { BASE_TOUCH_RANGE, LANE_Y, UNIT_MIN_SPACING } from '../constants/balance';
-import type { AgeId, UnitDefinition, UnitEntity, UnitId, Side } from '../types';
+import {
+  BASE_TOUCH_RANGE,
+  LANE_Y,
+  UNIT_MIN_SPACING,
+  UNIT_SPAWN_OFFSET_FROM_BASE,
+} from '../constants/balance';
+import type { UnitDefinition, UnitEntity, UnitId, Side } from '../types';
 import { CombatSystem } from './CombatSystem';
 import type { SpawnProjectileOptions } from './ProjectileSystem';
 
@@ -8,14 +13,6 @@ interface DamageUnitModifiers {
   debuffDurationMs?: number;
   debuffAttackSpeedMultiplier?: number;
 }
-
-const RANGED_ENGAGE_DISTANCE_BY_AGE: Record<AgeId, number> = {
-  hearth: UNIT_MIN_SPACING * 2,
-  arcane: UNIT_MIN_SPACING * 2.7,
-  beast: UNIT_MIN_SPACING * 3.4,
-  runeforge: UNIT_MIN_SPACING * 4.1,
-  astral: UNIT_MIN_SPACING * 4.8,
-};
 
 interface UnitSystemContext {
   scene: Phaser.Scene;
@@ -58,7 +55,7 @@ export class UnitSystem {
 
   public spawn(side: Side, def: UnitDefinition): UnitEntity {
     const direction = side === 'player' ? 1 : -1;
-    const spawnX = this.context.getHomeBaseX(side) + direction * 132;
+    const spawnX = this.context.getHomeBaseX(side) + direction * UNIT_SPAWN_OFFSET_FROM_BASE;
     const laneOffset = [0, -10, 10][this.nextUnitUid % 3] ?? 0;
 
     const bodyShape =
@@ -144,17 +141,17 @@ export class UnitSystem {
       this.processTraits(unit, deltaMs);
 
       const effectiveRange = this.getEffectiveRange(unit);
-      const engageRange = this.getEngageRange(unit, effectiveRange);
+      const engageRange = this.getEngageRange(effectiveRange);
       const allyBlocked = this.isBlockedByAlly(unit);
 
       let target = this.findBestEnemyInRange(unit, engageRange);
-      let enemyBaseInRange = this.isEnemyBaseInRange(unit, engageRange);
+      let enemyBaseInRange = this.isEnemyBaseInRange(unit);
 
       // Allow ranged units to fire over frontline allies when movement is blocked.
       if (!target && allyBlocked && unit.def.attackType === 'projectile' && !unit.anchored) {
         target = this.findBestEnemyInRange(unit, effectiveRange);
         if (!enemyBaseInRange) {
-          enemyBaseInRange = this.isEnemyBaseInRange(unit, effectiveRange);
+          enemyBaseInRange = this.isEnemyBaseInRange(unit);
         }
       }
 
@@ -418,13 +415,8 @@ export class UnitSystem {
     return true;
   }
 
-  private getEngageRange(unit: UnitEntity, effectiveRange: number): number {
-    if (unit.def.attackType !== 'projectile' || unit.anchored) {
-      return effectiveRange;
-    }
-
-    const ageRange = RANGED_ENGAGE_DISTANCE_BY_AGE[unit.def.age];
-    return Math.min(effectiveRange, ageRange);
+  private getEngageRange(effectiveRange: number): number {
+    return effectiveRange;
   }
 
   private getEffectiveRange(unit: UnitEntity): number {
@@ -435,13 +427,8 @@ export class UnitSystem {
     return unit.def.attackRange;
   }
 
-  private isEnemyBaseInRange(unit: UnitEntity, range: number): boolean {
-    const baseRange =
-      unit.def.attackType === 'projectile'
-        ? Math.min(range * 0.58, 175)
-        : range;
-
-    return Math.abs(this.context.getEnemyBaseX(unit.side) - unit.x) <= baseRange + BASE_TOUCH_RANGE;
+  private isEnemyBaseInRange(unit: UnitEntity): boolean {
+    return Math.abs(this.context.getEnemyBaseX(unit.side) - unit.x) <= UNIT_SPAWN_OFFSET_FROM_BASE;
   }
 
   private syncVisual(unit: UnitEntity): void {

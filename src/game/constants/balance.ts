@@ -15,9 +15,10 @@ export const FIXED_STEP_MS = 1000 / 60;
 
 export const BASE_TOUCH_RANGE = 70;
 export const UNIT_MIN_SPACING = 24;
+export const UNIT_SPAWN_OFFSET_FROM_BASE = 108;
 
-export const PLAYER_GOLD_ON_START = 180;
-export const AI_GOLD_ON_START = 180;
+export const PLAYER_GOLD_ON_START = 75;
+export const AI_GOLD_ON_START = 75;
 
 export const AI_DECISION_INTERVAL_MS = 900;
 

@@ -111,14 +111,16 @@ const TURRET_BARREL_COLORS: Record<AgeId, [number, number, number]> = {
   astral: [0xe0e7ff, 0xf5f3ff, 0xf8fafc],
 };
 
-const MAX_TURRET_RANGE_TO_CENTER = 660;
+const MAX_TURRET_RANGE_TO_CENTER = 670;
+const RANGE_UNIT_STEP_PX = 24;
+const MELEE_CONTACT_RANGE_PX = 40;
 
 const TURRET_BASE_RANGE_BY_AGE: Record<AgeId, number> = {
-  hearth: 300,
-  arcane: 380,
-  beast: 470,
-  runeforge: 560,
-  astral: 620,
+  hearth: 320,
+  arcane: 400,
+  beast: 490,
+  runeforge: 575,
+  astral: 625,
 };
 
 const EXTERNAL_UNIT_ID_ALIASES: Record<string, UnitId> = {
@@ -326,6 +328,11 @@ function resolveProjectile(
   };
 }
 
+function resolveAttackRangePx(rawRange: number): number {
+  const rangeUnits = Math.max(0, asNumber(rawRange, 0));
+  return Math.max(MELEE_CONTACT_RANGE_PX, Math.round(MELEE_CONTACT_RANGE_PX + rangeUnits * RANGE_UNIT_STEP_PX));
+}
+
 function resolveUnitDefinition(
   ageId: AgeId,
   rawUnit: RawUnitConfig,
@@ -353,7 +360,7 @@ function resolveUnitDefinition(
     cooldownMs: Math.max(250, Math.round(asNumber(rawUnit.cooldownSec, 3.5) * 1000)),
     maxHp: Math.max(30, Math.round(asNumber(rawUnit.hp, 120))),
     damage: Math.max(1, Math.round(asNumber(rawUnit.damage, 12))),
-    attackRange: Math.max(20, Math.round(asNumber(rawUnit.range, 45))),
+    attackRange: resolveAttackRangePx(rawUnit.range),
     attackCooldownMs: toCooldownMsFromAttackRate(asNumber(rawUnit.attackRate, 1), 1000),
     moveSpeed:
       role.includes('stationary') || (rawUnit.tags ?? []).includes('stationary')
@@ -426,15 +433,15 @@ function createTurretLevels(ageId: AgeId, rawWeapon: RawBaseWeaponConfig): Turre
   const mk3Weapon = scaleWeapon(baseWeapon, 2);
 
   const baseRange = TURRET_BASE_RANGE_BY_AGE[ageId];
-  const mk2Range = Math.min(MAX_TURRET_RANGE_TO_CENTER, baseRange + 25);
-  const mk3Range = Math.min(MAX_TURRET_RANGE_TO_CENTER, baseRange + 45);
+  const mk2Range = Math.min(MAX_TURRET_RANGE_TO_CENTER, baseRange + 30);
+  const mk3Range = Math.min(MAX_TURRET_RANGE_TO_CENTER, baseRange + 55);
 
   baseWeapon.range = baseRange;
   mk2Weapon.range = mk2Range;
   mk3Weapon.range = mk3Range;
 
   const upgradeCost = Math.max(100, Math.round(asNumber(rawWeapon.upgradeCost, 350)));
-  const mk2Cost = Math.max(upgradeCost + 80, Math.round(upgradeCost * 1.42));
+  const mk2Cost = Math.max(upgradeCost + 120, Math.round(upgradeCost * 1.55));
   const displayName = rawWeapon.displayName || 'Base Turret';
 
   return [

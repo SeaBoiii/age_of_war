@@ -1,4 +1,4 @@
-﻿# Age of War: Echoes
+# Age of War: Echoes
 
 Single-player 1-lane tug-of-war strategy game inspired by Age of War.
 
@@ -7,30 +7,73 @@ Single-player 1-lane tug-of-war strategy game inspired by Age of War.
 - Vite + React + TypeScript
 - Tailwind CSS v4 (UI)
 - Phaser 3 (game loop + rendering)
-- localStorage persistence (tech unlocks + meta upgrades)
+- localStorage (progress persistence)
 
-## Features (MVP)
+## Current Gameplay
 
-- Player base (left) vs AI base (right) with HP and age-scaled base turrets, including turret upgrades per age.
-- Passive gold income + kill rewards.
-- Unit spawning with costs and per-unit cooldowns.
-- Melee and ranged combat with projectiles and splash/pierce abilities.
-- 5 ages with unique rosters and configurable per-age economy/turret settings:
-  - Hearth: Swordsman, Archer, Spearman
-  - Arcane: Shield Acolyte, Battlemage, Hexer
-  - Beast: Wolf Rider, Treant, Wyvern
-  - Runeforge: Golem, Rune Gunner, Turret Caster
-  - Astral: Portal Knight, Starcaller, Void Reaper
-- AI using the same economy/spawn/age rules with defensive and mix heuristics.
-- Start screen (Play + How to Play + meta upgrades + start-age selection).
-- End screen (Win/Lose + Restart/Menu).
-- Looping background music with in-game sound toggle.
-- Responsive layout for desktop/mobile.
+- 5 ages with per-age unit roster, economy, and turret progression:
+  - Hearth, Arcane, Beast, Runeforge, Astral
+- Config-driven balance from `src/game/config/gameConfig.json`:
+  - unit cost/stats/effects by age
+  - age advance costs
+  - base weapon/turret base values per age
+- Base turrets are rendered and upgradeable (3 levels per age):
+  - Mk I -> Mk II -> Mk III
+  - next age base turret is enforced to be stronger than previous age max turret
+  - turret range is age-scaled and capped so it does not cross map midpoint
+- Queue-based spawning:
+  - buying a unit adds it to a spawn queue
+  - spawn timing uses unit spawn rate (`cooldownSec` in config)
+  - max queue size is 5
+- Economy model:
+  - player starts at 75 gold
+  - player passive income is disabled
+  - player earns gold by kills only: `ceil(enemyCost * 1.3)`
+  - AI earns passive income only
+- Combat:
+  - melee + projectile combat
+  - support for splash, pierce, debuffs, execute-style effects, and summon effects
+  - ranged movement behavior allows firing while advancing
 
-## Audio Credits
+## Menus and Controls
 
-- "Glorious Morning" by Waterflame
-- Track file: `public/assets/music/91476_Glorious_morning.mp3`
+- Start screen:
+  - Play
+  - Difficulty selector placeholder (non-functional)
+  - How to Play
+  - audio mute/unmute icon + volume slider
+  - in dev mode, AI vs AI toggle
+- In-game:
+  - Pause button in HUD or `Esc` key to pause
+  - pause menu supports:
+    - Resume
+    - click outside modal to resume
+    - mute/unmute + volume (shared state with start screen)
+    - Quit Game (returns to start screen and resets match state)
+- End screen:
+  - Victory/Defeat
+  - Restart
+  - Menu
+
+## AI and Debug (Dev Only)
+
+- AI can decide between:
+  - advancing age
+  - upgrading turret
+  - spawning frontline/ranged combinations
+- Tactical mode switching is implemented (`defend`, `stabilize`, `tech`, `pressure`).
+- Dev debug console is rendered outside the game viewport and hidden in production:
+  - latest message banner
+  - collapsible panel (`^`/`v`)
+  - age/turret status for player and AI
+  - AI decision logs and action traces
+  - AI vs AI toggle
+
+## Balance Notes
+
+- Turret upgrade pricing is age-tuned via `baseWeapon.upgradeCost` in `src/game/config/gameConfig.json`.
+- Mk II upgrade cost is auto-derived in resolver and is always more expensive than Mk I.
+- Validation for turret levels/cost ordering is in `src/game/constants/ages.ts`.
 
 ## Run Locally
 
@@ -39,7 +82,7 @@ npm install
 npm run dev
 ```
 
-## Production Build
+## Build
 
 ```bash
 npm run build
@@ -48,7 +91,7 @@ npm run preview
 
 ## Automated Benchmark Runner
 
-Run repeated AI-vs-AI benchmark simulations from terminal:
+Run repeated AI-vs-AI simulations from terminal:
 
 ```bash
 # default benchmark
@@ -67,72 +110,15 @@ Optional JSON output:
 npm run benchmark -- --json --out benchmark-results.json
 ```
 
-## GitHub Pages Deployment
+## Config and Core Files
 
-The repo includes `.github/workflows/deploy-pages.yml`.
-
-- Push to `main` triggers build + deploy to Pages.
-- Workflow builds `dist/` and publishes it via GitHub Pages artifact actions.
-
-### Required GitHub repo settings
-
-1. Open repo `Settings -> Pages`.
-2. Set `Source` to `GitHub Actions`.
-
-## Base Path / Repo Name Handling
-
-Vite reads base path from `VITE_BASE_PATH`:
-
-- `vite.config.ts` uses:
-  - `base: process.env.VITE_BASE_PATH ?? '/'`
-- GitHub Actions sets:
-  - `VITE_BASE_PATH=/<repo-name>/`
-
-### If repo name changes
-
-No code change is needed in workflow because it uses `${{ github.event.repository.name }}` automatically.
-
-### If you want a custom base path manually
-
-```bash
-# PowerShell
-$env:VITE_BASE_PATH='/my-custom-path/'
-npm run build
-```
-
-## Phaser Asset Base URL
-
-Phaser is configured with Vite base URL:
-
-- `src/game/createPhaserGame.ts` uses `loader.baseURL = import.meta.env.BASE_URL`
-
-This keeps local asset loading compatible with GitHub Pages subpaths.
-
-## Project Structure
-
-```text
-src/
-  game/
-    constants/
-    scenes/
-    systems/
-  state/
-  ui/
-    components/
-    hooks/
-```
-
-## Extending Units
-
-Primary balance/content config is now JSON-driven:
-
-- `src/game/config/gameConfig.json`
-
-Runtime resolution and effect mapping lives in:
-
-- `src/game/config/resolveConfig.ts`
-
-This resolver maps the JSON schema into game runtime values (ages, rosters, turret tiers, economy, unit stats), and translates supported effect descriptors into current combat traits.
+- `src/game/config/gameConfig.json`: main per-age game balance config
+- `src/game/config/resolveConfig.ts`: resolves JSON config into runtime definitions
+- `src/game/scenes/BattleScene.ts`: core match loop, economy, queueing, base/turret combat
+- `src/game/systems/AiSystem.ts`: AI tactical decision engine
+- `src/ui/components/StartScreen.tsx`: start menu UI
+- `src/ui/components/PauseMenu.tsx`: pause/settings menu UI
+- `src/ui/components/DebugConsole.tsx`: dev-only debug panel
 
 ## Persistence
 
@@ -140,21 +126,47 @@ Saved in localStorage key:
 
 - `age_of_war_progress_v1`
 
-Stores:
+Currently stores:
 
 - highest unlocked age
 - shard currency
-- meta upgrades (income/base HP)
-- selected start age
+- meta upgrade levels
+- selected start age (data preserved even while start-age menu is currently not exposed)
 
-## Acceptance Checklist
+## GitHub Pages Deployment
 
-- [x] Starts locally (`npm install`, `npm run dev`)
-- [x] Gameplay loop works with win/lose
-- [x] Builds (`npm run build`)
-- [x] GitHub Pages workflow included
-- [x] Base paths handled for Pages
-- [x] Responsive UI
-- [x] No remote assets/services required
+This repo includes `.github/workflows/deploy-pages.yml`.
 
+- Push to `main` triggers build + deploy to Pages.
+- Workflow builds `dist/` and publishes it via GitHub Pages artifact actions.
 
+Required repo setting:
+
+1. Open `Settings -> Pages`.
+2. Set `Source` to `GitHub Actions`.
+
+## Base Path / Repo Name Handling
+
+`vite.config.ts` uses:
+
+- `base: process.env.VITE_BASE_PATH ?? '/'`
+
+GitHub Actions sets:
+
+- `VITE_BASE_PATH=/<repo-name>/`
+
+Custom local build base path (PowerShell):
+
+```bash
+$env:VITE_BASE_PATH='/my-custom-path/'
+npm run build
+```
+
+Phaser uses Vite base URL for assets via:
+
+- `src/game/createPhaserGame.ts` (`loader.baseURL = import.meta.env.BASE_URL`)
+
+## Audio Credits
+
+- "Glorious Morning" by Waterflame
+- Track file: `public/assets/music/91476_Glorious_morning.mp3`

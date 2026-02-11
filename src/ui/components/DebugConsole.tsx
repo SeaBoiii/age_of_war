@@ -1,7 +1,8 @@
-﻿import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { AGE_DEFINITIONS } from '../../game/constants/ages';
 import { gameBridge } from '../../state/gameBridge';
 import type { GameUiState } from '../../state/types';
+import { BotIcon, ChevronDownIcon, ChevronUpIcon } from './UiIcons';
 
 interface DebugConsoleProps {
   state: GameUiState;
@@ -24,9 +25,13 @@ export function DebugConsole({ state }: DebugConsoleProps) {
   }, [state.debugLogs.length, collapsed]);
 
   return (
-    <div className="mt-3 rounded-lg border border-cyan-300/35 bg-slate-950/80 p-2 text-[11px] text-cyan-100 shadow-lg">
-      <div className="mb-2 flex items-center justify-between gap-2 border-b border-cyan-300/20 pb-1">
-        <span className="font-semibold tracking-wide text-cyan-200">DEV DEBUG CONSOLE</span>
+    <div className="ui-soft-panel mt-3 rounded-lg p-2 text-[11px] text-cyan-100 shadow-lg">
+      <div className="mb-2 flex items-center justify-between gap-2 border-b border-cyan-300/20 pb-2">
+        <span className="inline-flex items-center gap-1.5 font-semibold tracking-wide text-cyan-200">
+          <BotIcon className="h-3.5 w-3.5" />
+          DEV DEBUG CONSOLE
+        </span>
+
         <div className="flex items-center gap-2">
           <button
             type="button"
@@ -47,11 +52,12 @@ export function DebugConsole({ state }: DebugConsoleProps) {
 
           <button
             type="button"
-            className="rounded border border-cyan-300/35 bg-slate-800/70 px-2 py-0.5 text-[10px] text-cyan-100 transition hover:bg-slate-700/80"
+            className="inline-flex items-center gap-1 rounded border border-cyan-300/35 bg-slate-800/70 px-2 py-0.5 text-[10px] text-cyan-100 transition hover:bg-slate-700/80"
             onClick={() => setCollapsed((prev) => !prev)}
             aria-label={collapsed ? 'Expand debug console' : 'Collapse debug console'}
             title={collapsed ? 'Expand debug console' : 'Collapse debug console'}
           >
+            {collapsed ? <ChevronDownIcon className="h-3.5 w-3.5" /> : <ChevronUpIcon className="h-3.5 w-3.5" />}
             {collapsed ? 'v' : '^'}
           </button>
         </div>

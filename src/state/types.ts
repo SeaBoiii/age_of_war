@@ -38,6 +38,7 @@ export interface GameUiState {
   aiTurretMaxLevel: number;
   playerQueueCount: number;
   playerQueueLimit: number;
+  playerQueuePreview: UnitId[];
   aiQueueCount: number;
   aiQueueLimit: number;
   canAdvanceAge: boolean;
@@ -78,6 +79,7 @@ export interface BattleSnapshot {
   aiTurretMaxLevel: number;
   playerQueueCount: number;
   playerQueueLimit: number;
+  playerQueuePreview: UnitId[];
   aiQueueCount: number;
   aiQueueLimit: number;
   canAdvanceAge: boolean;

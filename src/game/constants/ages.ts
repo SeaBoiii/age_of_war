@@ -28,6 +28,22 @@ function validateAgeDefinitions(definitions: AgeDefinition[]): void {
         throw new Error(`Age ${age.id} turret level ${index} must have a positive upgradeCost.`);
       }
     }
+
+    if (age.turretLevels.length >= 3) {
+      const firstUpgradeCost = age.turretLevels[0]?.upgradeCost;
+      const secondUpgradeCost = age.turretLevels[1]?.upgradeCost;
+      if (
+        firstUpgradeCost !== null &&
+        firstUpgradeCost !== undefined &&
+        secondUpgradeCost !== null &&
+        secondUpgradeCost !== undefined &&
+        secondUpgradeCost <= firstUpgradeCost
+      ) {
+        throw new Error(
+          `Age ${age.id} second turret upgrade must cost more than the first turret upgrade.`,
+        );
+      }
+    }
   }
 }
 

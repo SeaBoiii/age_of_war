@@ -19,6 +19,7 @@ function createUnitButtons(ageIndex: number) {
     unitId: unit.id,
     name: unit.name,
     icon: unit.icon,
+    color: unit.color,
     cost: unit.cost,
     spawnRateMs: unit.cooldownMs,
     queuedCount: 0,
@@ -57,6 +58,7 @@ function createInitialState(progress: ProgressState): GameUiState {
     aiTurretMaxLevel: getTurretMaxLevel(ageIndex),
     playerQueueCount: 0,
     playerQueueLimit: 5,
+    playerQueuePreview: [],
     aiQueueCount: 0,
     aiQueueLimit: 5,
     canAdvanceAge: age.advanceCost !== null,
@@ -125,6 +127,7 @@ export class GameBridge {
           aiTurretMaxLevel: getTurretMaxLevel(ageIndex),
           playerQueueCount: 0,
           playerQueueLimit: 5,
+          playerQueuePreview: [],
           aiQueueCount: 0,
           aiQueueLimit: 5,
           canAdvanceAge: age.advanceCost !== null,
@@ -141,6 +144,7 @@ export class GameBridge {
           showHowTo: false,
           debugLogs: [],
           playerQueueCount: 0,
+          playerQueuePreview: [],
           aiQueueCount: 0,
           battleMessage: 'Choose your upgrades and launch a battle.',
         });
@@ -173,6 +177,7 @@ export class GameBridge {
           showHowTo: false,
           debugLogs: [],
           playerQueueCount: 0,
+          playerQueuePreview: [],
           aiQueueCount: 0,
           battleMessage: 'Clash begins. Push the enemy base.',
         });
@@ -187,6 +192,7 @@ export class GameBridge {
           showHowTo: false,
           debugLogs: [],
           playerQueueCount: 0,
+          playerQueuePreview: [],
           aiQueueCount: 0,
           battleMessage: 'Fresh battle deployed.',
         });

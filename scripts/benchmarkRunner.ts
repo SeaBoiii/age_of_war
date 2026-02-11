@@ -685,8 +685,6 @@ class BenchmarkMatchSimulator {
       if (hpBefore > 0 && target.hp <= 0) {
         if (attacker === 'player') {
           this.sideState.player.gold += Math.ceil(target.cost * 1.3);
-        } else {
-          this.sideState.ai.gold += target.bounty;
         }
       }
     }
