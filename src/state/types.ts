@@ -19,6 +19,7 @@ export interface GameUiState {
   showHowTo: boolean;
   paused: boolean;
   soundOn: boolean;
+  soundVolume: number;
   winner: Side | null;
   gold: number;
   aiGold: number;
@@ -48,6 +49,7 @@ export type GameCommand =
   | { type: 'upgrade_turret'; side: Side }
   | { type: 'toggle_pause' }
   | { type: 'toggle_sound' }
+  | { type: 'set_sound_volume'; value: number }
   | { type: 'set_how_to'; value: boolean }
   | { type: 'return_to_menu' }
   | { type: 'set_start_age'; ageIndex: number }

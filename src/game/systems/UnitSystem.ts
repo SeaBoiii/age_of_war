@@ -342,10 +342,20 @@ export class UnitSystem {
 
   private findBestEnemyInRange(unit: UnitEntity, range: number): UnitEntity | undefined {
     const direction = unit.side === 'player' ? 1 : -1;
+    const homeBaseX = this.context.getHomeBaseX(unit.side);
+    const baseDefenseRadius = BASE_TOUCH_RANGE + 160;
 
     return this.units
       .filter((enemy) => enemy.alive && enemy.side !== unit.side)
-      .filter((enemy) => (enemy.x - unit.x) * direction >= -8)
+      .filter((enemy) => {
+        const directionalDistance = (enemy.x - unit.x) * direction;
+        if (directionalDistance >= -8) {
+          return true;
+        }
+
+        // If an enemy is pressuring our base, allow units to turn and defend it.
+        return Math.abs(enemy.x - homeBaseX) <= baseDefenseRadius;
+      })
       .sort((left, right) => Math.abs(left.x - unit.x) - Math.abs(right.x - unit.x))
       .find((enemy) => Math.abs(enemy.x - unit.x) <= range + enemy.def.size * 0.45);
   }
@@ -359,7 +369,12 @@ export class UnitSystem {
   }
 
   private isEnemyBaseInRange(unit: UnitEntity, range: number): boolean {
-    return Math.abs(this.context.getEnemyBaseX(unit.side) - unit.x) <= range + BASE_TOUCH_RANGE;
+    const baseRange =
+      unit.def.attackType === 'projectile'
+        ? Math.min(range * 0.58, 175)
+        : range;
+
+    return Math.abs(this.context.getEnemyBaseX(unit.side) - unit.x) <= baseRange + BASE_TOUCH_RANGE;
   }
 
   private syncVisual(unit: UnitEntity): void {

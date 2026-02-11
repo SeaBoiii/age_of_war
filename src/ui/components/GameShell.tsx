@@ -1,12 +1,33 @@
-﻿import { ActionBar } from './ActionBar';
+﻿import { useEffect } from 'react';
+import { gameBridge } from '../../state/gameBridge';
+import { useGameState } from '../hooks/useGameState';
+import { ActionBar } from './ActionBar';
 import { EndScreen } from './EndScreen';
 import { GameHud } from './GameHud';
+import { PauseMenu } from './PauseMenu';
 import { PhaserViewport } from './PhaserViewport';
 import { StartScreen } from './StartScreen';
-import { useGameState } from '../hooks/useGameState';
 
 export function GameShell() {
   const state = useGameState();
+
+  useEffect(() => {
+    if (state.mode !== 'playing') {
+      return;
+    }
+
+    const handleKeydown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape' || event.repeat) {
+        return;
+      }
+
+      event.preventDefault();
+      gameBridge.dispatch({ type: 'toggle_pause' });
+    };
+
+    window.addEventListener('keydown', handleKeydown);
+    return () => window.removeEventListener('keydown', handleKeydown);
+  }, [state.mode]);
 
   return (
     <div className="relative mx-auto w-full max-w-6xl overflow-hidden rounded-2xl border border-white/20 bg-slate-900/80 shadow-2xl">
@@ -19,11 +40,7 @@ export function GameShell() {
       {state.mode === 'start' && <StartScreen state={state} />}
       {state.mode === 'ended' && <EndScreen state={state} />}
 
-      {state.mode === 'playing' && state.paused && (
-        <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-slate-950/55 text-2xl font-bold tracking-wide text-slate-100">
-          Paused
-        </div>
-      )}
+      {state.mode === 'playing' && state.paused && <PauseMenu state={state} />}
     </div>
   );
 }

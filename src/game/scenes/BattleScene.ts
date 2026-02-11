@@ -724,16 +724,19 @@ export class BattleScene extends Phaser.Scene {
   }
 
   private ensureBgmPlaying(): void {
-    if (!this.bridge.getState().soundOn || !this.cache.audio.exists(BGM_KEY)) {
+    const state = this.bridge.getState();
+    if (!state.soundOn || !this.cache.audio.exists(BGM_KEY)) {
       return;
     }
 
     if (!this.bgm) {
       this.bgm = this.sound.add(BGM_KEY, {
         loop: true,
-        volume: 0.34,
+        volume: state.soundVolume,
       });
     }
+
+    this.sound.volume = state.soundVolume;
 
     if (!this.bgm.isPlaying) {
       this.sound.mute = false;
@@ -742,8 +745,10 @@ export class BattleScene extends Phaser.Scene {
   }
 
   private syncSoundState(): void {
-    const soundOn = this.bridge.getState().soundOn;
+    const { soundOn, soundVolume } = this.bridge.getState();
     this.sound.mute = !soundOn;
+
+    this.sound.volume = soundVolume;
 
     if (soundOn) {
       this.ensureBgmPlaying();

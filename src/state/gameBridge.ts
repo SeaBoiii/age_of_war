@@ -24,6 +24,10 @@ function createUnitButtons(ageIndex: number) {
   }));
 }
 
+function clampSoundVolume(value: number): number {
+  return Math.max(0, Math.min(1, value));
+}
+
 function createInitialState(progress: ProgressState): GameUiState {
   const ageIndex = progress.selectedStartAge;
   const age = getAgeDefinition(ageIndex);
@@ -33,6 +37,7 @@ function createInitialState(progress: ProgressState): GameUiState {
     showHowTo: false,
     paused: false,
     soundOn: true,
+    soundVolume: 0.34,
     winner: null,
     gold: 0,
     aiGold: 0,
@@ -83,6 +88,10 @@ export class GameBridge {
       }
       case 'toggle_sound': {
         this.patchState({ soundOn: !this.state.soundOn });
+        return;
+      }
+      case 'set_sound_volume': {
+        this.patchState({ soundVolume: clampSoundVolume(command.value) });
         return;
       }
       case 'set_start_age': {
