@@ -35,10 +35,10 @@ export function ActionBar({ state }: ActionBarProps) {
   return (
     <div className="pointer-events-none absolute inset-x-0 bottom-0 translate-y-1 p-1 sm:translate-y-2 sm:p-2">
       <div className="ui-glass-panel pointer-events-auto rounded-xl p-2 sm:p-3">
-        <div className="mb-1.5 flex flex-wrap items-center gap-2">
+        <div className="mb-2 flex flex-wrap items-center gap-2">
           <button
             type="button"
-            className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-amber-300/45 bg-amber-400/22 px-3 py-2 text-xs font-bold text-amber-100 transition hover:-translate-y-0.5 hover:bg-amber-300/30 disabled:cursor-not-allowed disabled:opacity-45 sm:text-sm"
+            className="ui-pressable ui-shadow-warm inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-amber-300/45 bg-amber-400/22 px-3 py-2 text-xs font-bold text-amber-100 hover:bg-amber-300/30 disabled:cursor-not-allowed disabled:opacity-45 sm:text-sm"
             disabled={!state.canAdvanceAge || state.advanceAgeCost === null || !canPayAdvance || state.paused}
             onClick={() => gameBridge.dispatch({ type: 'advance_age', side: 'player' })}
           >
@@ -50,7 +50,7 @@ export function ActionBar({ state }: ActionBarProps) {
 
           <button
             type="button"
-            className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-sky-300/45 bg-sky-400/20 px-3 py-2 text-xs font-bold text-sky-100 transition hover:-translate-y-0.5 hover:bg-sky-300/30 disabled:cursor-not-allowed disabled:opacity-45 sm:text-sm"
+            className="ui-pressable ui-shadow-cool inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-sky-300/45 bg-sky-400/20 px-3 py-2 text-xs font-bold text-sky-100 hover:bg-sky-300/30 disabled:cursor-not-allowed disabled:opacity-45 sm:text-sm"
             disabled={state.paused || state.playerTurretUpgradeCost === null || !canPayTurretUpgrade}
             onClick={() => gameBridge.dispatch({ type: 'upgrade_turret', side: 'player' })}
           >
@@ -58,14 +58,15 @@ export function ActionBar({ state }: ActionBarProps) {
             Turret {turretButtonLabel}
           </button>
 
-          <span className="ml-auto text-[11px] text-slate-300 sm:text-xs">{state.battleMessage}</span>
+          <span className="ui-subtle-text ml-auto max-w-[60%] truncate text-[11px] sm:text-xs">{state.battleMessage}</span>
         </div>
 
-        <div className="mb-1.5 flex items-center gap-2">
+        <div className="mb-2 flex items-center gap-2">
           <span className="inline-flex shrink-0 items-center gap-1 rounded-md border border-indigo-300/35 bg-indigo-400/15 px-2 py-1 text-[10px] text-indigo-100 sm:text-xs">
             <QueueIcon className="h-3.5 w-3.5" />
             Spawn Queue
           </span>
+          <span className="ui-action-chip">{state.playerQueueCount}/{state.playerQueueLimit}</span>
 
           <div className="flex flex-wrap items-center gap-1.5">
             {Array.from({ length: state.playerQueueLimit }).map((_, index) => {
@@ -76,7 +77,7 @@ export function ActionBar({ state }: ActionBarProps) {
                 return (
                   <div
                     key={`queue-slot-${index}`}
-                    className="flex h-8 w-8 items-center justify-center rounded-md border border-slate-300/20 bg-slate-800/50 text-[10px] text-slate-500"
+                    className="flex h-8 w-8 items-center justify-center rounded-md border border-slate-300/20 bg-slate-800/50 text-[10px] text-slate-500 sm:h-9 sm:w-9"
                   >
                     {index + 1}
                   </div>
@@ -86,7 +87,9 @@ export function ActionBar({ state }: ActionBarProps) {
               return (
                 <div
                   key={`queue-slot-${index}`}
-                  className="relative flex h-8 w-8 items-center justify-center rounded-md border text-[11px] font-bold text-slate-100"
+                  className={`relative flex h-8 w-8 items-center justify-center rounded-md border text-[11px] font-bold text-slate-100 sm:h-9 sm:w-9 ${
+                    index === 0 ? 'ui-queue-slot-head' : ''
+                  }`}
                   style={{
                     borderColor: unitColorToRgba(queuedUnit.color, 0.68),
                     backgroundColor: unitColorToRgba(queuedUnit.color, 0.28),
@@ -103,18 +106,32 @@ export function ActionBar({ state }: ActionBarProps) {
           {queueFull && <span className="text-[10px] text-rose-200/90">Queue full</span>}
         </div>
 
-        <div
-          className="mb-2 h-1.5 overflow-hidden rounded-full bg-slate-700/80"
-          title={
-            nextQueuedUnit && nextQueuedUnit.spawnEtaMs !== null
-              ? `${nextQueuedUnit.name} spawns in ${(nextQueuedUnit.spawnEtaMs / 1000).toFixed(1)}s`
-              : 'Queue empty'
-          }
-        >
+        <div className="mb-2">
+          <div className="mb-1 flex items-center justify-between text-[10px] text-slate-300">
+            <span>
+              {nextQueuedUnit && nextQueuedUnit.spawnEtaMs !== null
+                ? `Next: ${nextQueuedUnit.name}`
+                : 'Next: Queue empty'}
+            </span>
+            <span>
+              {nextQueuedUnit && nextQueuedUnit.spawnEtaMs !== null
+                ? `${(nextQueuedUnit.spawnEtaMs / 1000).toFixed(1)}s`
+                : '--'}
+            </span>
+          </div>
           <div
-            className="h-full rounded-full bg-gradient-to-r from-cyan-400 to-sky-300 transition-[width] duration-120"
-            style={{ width: `${Math.round(nextSpawnProgress * 100)}%` }}
-          />
+            className="ui-meter h-2"
+            title={
+              nextQueuedUnit && nextQueuedUnit.spawnEtaMs !== null
+                ? `${nextQueuedUnit.name} spawns in ${(nextQueuedUnit.spawnEtaMs / 1000).toFixed(1)}s`
+                : 'Queue empty'
+            }
+          >
+            <div
+              className="ui-meter-fill bg-gradient-to-r from-cyan-400 to-sky-300 transition-[width] duration-120"
+              style={{ width: `${Math.round(nextSpawnProgress * 100)}%` }}
+            />
+          </div>
         </div>
 
         <div className="grid grid-cols-3 gap-2 sm:grid-cols-6">
@@ -126,7 +143,11 @@ export function ActionBar({ state }: ActionBarProps) {
               <button
                 key={unit.unitId}
                 type="button"
-                className="group relative overflow-hidden rounded-lg border border-white/20 bg-slate-800/70 p-2 text-left transition hover:-translate-y-0.5 hover:bg-slate-700/80 disabled:cursor-not-allowed disabled:opacity-50"
+                className={`ui-pressable group relative overflow-hidden rounded-lg border p-2 text-left ${
+                  disabled
+                    ? 'cursor-not-allowed border-white/15 bg-slate-800/50 opacity-50'
+                    : 'border-white/20 bg-slate-800/70 hover:bg-slate-700/80'
+                }`}
                 disabled={disabled}
                 onClick={() => gameBridge.dispatch({ type: 'spawn_unit', unitId: unit.unitId })}
               >

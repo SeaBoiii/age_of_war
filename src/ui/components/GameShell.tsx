@@ -33,6 +33,7 @@ export function GameShell() {
   return (
     <div className="mx-auto w-full max-w-6xl ui-fade-up">
       <div className="relative overflow-hidden rounded-2xl border border-slate-200/20 bg-slate-900/55 shadow-[0_30px_60px_rgba(1,5,14,0.55)]">
+        <div className="pointer-events-none absolute inset-x-0 top-0 h-8 bg-gradient-to-b from-white/6 to-transparent" />
         <div className="pointer-events-none absolute -left-14 top-1/4 h-40 w-40 rounded-full bg-cyan-400/8 blur-3xl" />
         <div className="pointer-events-none absolute -right-16 bottom-0 h-44 w-44 rounded-full bg-amber-300/10 blur-3xl" />
 

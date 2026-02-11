@@ -13,6 +13,7 @@ export function EndScreen({ state }: EndScreenProps) {
   return (
     <div className="absolute inset-0 flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm">
       <div className="ui-glass-panel ui-pop relative w-full max-w-md overflow-hidden rounded-2xl p-6 text-center text-slate-100">
+        <div className="pointer-events-none absolute inset-x-0 top-0 h-16 bg-gradient-to-b from-white/6 to-transparent" />
         <div className="pointer-events-none absolute -right-7 top-0 h-24 w-24 rounded-full bg-sky-300/12 blur-3xl" />
         <div className="pointer-events-none absolute -left-7 bottom-0 h-24 w-24 rounded-full bg-amber-300/12 blur-3xl" />
 
@@ -20,7 +21,7 @@ export function EndScreen({ state }: EndScreenProps) {
           <div
             className={`mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-xl border ${
               won
-                ? 'border-emerald-300/40 bg-emerald-400/15 text-emerald-100'
+                ? 'border-emerald-300/40 bg-emerald-400/15 text-emerald-100 ui-shadow-cool'
                 : 'border-rose-300/40 bg-rose-400/15 text-rose-100'
             }`}
           >
@@ -36,7 +37,7 @@ export function EndScreen({ state }: EndScreenProps) {
           <div className="mt-5 flex items-center justify-center gap-3">
             <button
               type="button"
-              className="inline-flex items-center gap-2 rounded-lg border border-amber-300/45 bg-amber-400/20 px-4 py-2 text-sm font-semibold text-amber-100 transition hover:-translate-y-0.5 hover:bg-amber-300/30"
+              className="ui-pressable ui-shadow-warm inline-flex items-center gap-2 rounded-lg border border-amber-300/45 bg-amber-400/20 px-4 py-2 text-sm font-semibold text-amber-100 hover:bg-amber-300/30"
               onClick={() => {
                 emitUserGesture();
                 gameBridge.dispatch({ type: 'restart_match' });
@@ -47,7 +48,7 @@ export function EndScreen({ state }: EndScreenProps) {
             </button>
             <button
               type="button"
-              className="inline-flex items-center gap-2 rounded-lg border border-white/30 bg-slate-700/60 px-4 py-2 text-sm text-slate-100 transition hover:-translate-y-0.5 hover:bg-slate-600/70"
+              className="ui-pressable inline-flex items-center gap-2 rounded-lg border border-white/30 bg-slate-700/60 px-4 py-2 text-sm text-slate-100 hover:bg-slate-600/70"
               onClick={() => gameBridge.dispatch({ type: 'return_to_menu' })}
             >
               <HomeIcon className="h-4 w-4" />

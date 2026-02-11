@@ -63,7 +63,7 @@ export function DebugConsole({ state }: DebugConsoleProps) {
         </div>
       </div>
 
-      <div className="mb-2 rounded border border-cyan-300/15 bg-slate-900/70 px-2 py-1 text-[10px] text-cyan-100">
+      <div className="mb-2 rounded border border-cyan-300/20 bg-slate-900/80 px-2 py-1 text-[10px] text-cyan-100">
         Latest: {latestMessage}
       </div>
 
@@ -89,7 +89,7 @@ export function DebugConsole({ state }: DebugConsoleProps) {
 
           <div
             ref={logsRef}
-            className="max-h-40 overflow-y-auto rounded border border-cyan-300/15 bg-slate-900/70 p-2 font-mono text-[10px] leading-relaxed"
+            className="ui-scrollbar max-h-40 overflow-y-auto rounded border border-cyan-300/15 bg-slate-900/70 p-2 font-mono text-[10px] leading-relaxed"
           >
             {state.debugLogs.length === 0 ? (
               <div className="text-cyan-300/70">No debug events yet.</div>

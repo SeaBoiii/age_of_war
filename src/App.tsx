@@ -6,6 +6,7 @@ function App() {
     <div className="min-h-screen px-3 py-4 sm:px-5 sm:py-6">
       <div className="mx-auto flex w-full max-w-6xl flex-col gap-4">
         <header className="ui-glass-panel ui-pop relative overflow-hidden rounded-2xl p-4 sm:p-5">
+          <div className="pointer-events-none absolute inset-x-0 top-0 h-12 bg-gradient-to-b from-white/8 to-transparent" />
           <div className="pointer-events-none absolute -right-6 top-0 h-24 w-24 rounded-full bg-sky-300/15 blur-2xl" />
           <div className="pointer-events-none absolute -left-5 bottom-0 h-16 w-16 rounded-full bg-amber-300/15 blur-2xl" />
 
