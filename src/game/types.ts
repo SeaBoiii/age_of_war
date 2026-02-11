@@ -167,6 +167,8 @@ export interface UnitButtonState {
   cost: number;
   spawnRateMs: number;
   queuedCount: number;
+  spawnEtaMs: number | null;
+  spawnProgress: number;
 }
 
 export type UnitId =

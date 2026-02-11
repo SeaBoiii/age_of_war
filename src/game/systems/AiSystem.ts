@@ -14,6 +14,8 @@ interface AiContext {
   getEnemyAgeIndex: () => number;
   getAiGold: () => number;
   getAiIncomePerSecond: () => number;
+  getAiQueueCount: () => number;
+  getAiQueueLimit: () => number;
   isUnderPressure: () => boolean;
   getLaneAdvantage: () => number;
   getAiBaseHpRatio: () => number;
@@ -52,6 +54,8 @@ interface TacticalSnapshot {
   enemyAgeIndex: number;
   aiGold: number;
   aiIncomePerSecond: number;
+  aiQueueCount: number;
+  aiQueueLimit: number;
   laneAdvantage: number;
   underPressure: boolean;
   aiBaseHpRatio: number;
@@ -223,6 +227,42 @@ export class AiSystem {
     return unit.tags.includes('ranged') ? 'ranged' : 'frontline';
   }
 
+  private isWinningState(snapshot: TacticalSnapshot): boolean {
+    const laneLead = snapshot.laneAdvantage >= this.behavior.pressureModeThreshold + 35;
+    const baseHpLead = snapshot.aiBaseHpRatio - snapshot.enemyBaseHpRatio >= 0.1;
+    const forceLead = snapshot.ally.total >= snapshot.enemy.total + 2;
+    return laneLead || (baseHpLead && forceLead);
+  }
+
+  private isOvercommitted(snapshot: TacticalSnapshot): boolean {
+    const queueHeavy = snapshot.aiQueueCount >= Math.max(3, Math.floor(snapshot.aiQueueLimit * 0.6));
+    const forceHeavy = snapshot.ally.total >= Math.max(9, snapshot.enemy.total + 4);
+    return queueHeavy || forceHeavy;
+  }
+
+  private shouldBankHardForAge(snapshot: TacticalSnapshot): boolean {
+    if (!snapshot.canAdvance || snapshot.advanceCost === null) {
+      return false;
+    }
+
+    if (snapshot.underPressure || snapshot.aiBaseHpRatio < 0.5) {
+      return false;
+    }
+
+    const remaining = Math.max(0, snapshot.advanceCost - snapshot.aiGold);
+    const nearAdvance = remaining <= snapshot.advanceCost * 0.8;
+    return nearAdvance || this.isWinningState(snapshot) || this.isOvercommitted(snapshot);
+  }
+
+  private isSpawnAction(kind: AiActionKind): boolean {
+    return (
+      kind === 'spawn_frontline' ||
+      kind === 'spawn_ranged' ||
+      kind === 'spawn_duo' ||
+      kind === 'spawn_cheapest'
+    );
+  }
+
   private trySpawnWithTrace(unit: UnitDefinition, role: SpawnRole): boolean {
     if (this.context.trySpawnUnit(unit.id)) {
       this.lastSpawnRole = role;
@@ -297,6 +337,8 @@ export class AiSystem {
       enemyAgeIndex: this.context.getEnemyAgeIndex(),
       aiGold: this.context.getAiGold(),
       aiIncomePerSecond: this.context.getAiIncomePerSecond(),
+      aiQueueCount: this.context.getAiQueueCount(),
+      aiQueueLimit: this.context.getAiQueueLimit(),
       laneAdvantage: this.context.getLaneAdvantage(),
       underPressure: this.context.isUnderPressure(),
       aiBaseHpRatio: this.context.getAiBaseHpRatio(),
@@ -378,6 +420,7 @@ export class AiSystem {
       snapshot.laneAdvantage >= this.behavior.pressureModeThreshold || snapshot.enemyBaseHpRatio <= 0.62;
     const shouldBankForAge =
       canAdvanceSoon && hasLaneControl && goldRemainingToAdvance <= advanceCost * 0.7;
+    const shouldBankHardForAge = this.shouldBankHardForAge(snapshot);
 
     let score = MODE_ACTION_WEIGHTS[mode][candidate.kind];
     score -= this.actionRepeatPenalty(candidate.kind);
@@ -396,6 +439,7 @@ export class AiSystem {
         score -= snapshot.aiBaseHpRatio < 0.45 ? 45 : 0;
         score += hasLaneControl ? 48 : 0;
         score += shouldBankForAge ? 56 : 0;
+        score += shouldBankHardForAge ? 90 : 0;
         score += snapshot.advanceCost !== null && snapshot.aiGold >= snapshot.advanceCost ? 70 : 0;
         break;
       }
@@ -422,6 +466,7 @@ export class AiSystem {
         score += lane < -80 ? 22 : 0;
         score += this.lastSpawnRole === 'ranged' ? 10 : 0;
         score -= shouldBankForAge ? 46 : 0;
+        score -= shouldBankHardForAge ? 160 : 0;
         break;
       }
       case 'spawn_ranged': {
@@ -435,6 +480,7 @@ export class AiSystem {
         score -= snapshot.underPressure && snapshot.ally.frontline < snapshot.enemy.frontline ? 40 : 0;
         score += this.lastSpawnRole === 'frontline' ? 10 : 0;
         score -= shouldBankForAge ? 52 : 0;
+        score -= shouldBankHardForAge ? 172 : 0;
         break;
       }
       case 'spawn_duo': {
@@ -448,6 +494,7 @@ export class AiSystem {
         score += frontlineNeed > 0 || rangedNeed > 0 ? 30 : 10;
         score += snapshot.underPressure ? 16 : 0;
         score -= shouldBankForAge ? 68 : 0;
+        score -= shouldBankHardForAge ? 180 : 0;
         break;
       }
       case 'spawn_cheapest': {
@@ -458,6 +505,7 @@ export class AiSystem {
         score += this.estimateUnitPower(candidate.primaryUnit) * 0.12;
         score += snapshot.underPressure ? 12 : 0;
         score -= shouldBankForAge ? 40 : 0;
+        score -= shouldBankHardForAge ? 145 : 0;
         break;
       }
       case 'hold': {
@@ -473,6 +521,7 @@ export class AiSystem {
         score += lane > 90 ? 8 : 0;
         score -= snapshot.underPressure ? 62 : 0;
         score += shouldBankForAge ? 42 : 0;
+        score += shouldBankHardForAge ? 78 : 0;
         score += hasLaneControl && canAdvanceSoon ? 16 : 0;
         break;
       }
@@ -496,6 +545,9 @@ export class AiSystem {
 
       if (shouldBankForAge && candidate.kind !== 'advance_age' && candidate.kind !== 'hold') {
         score -= 32 + candidate.cost * 0.015;
+      }
+      if (shouldBankHardForAge && candidate.kind !== 'advance_age' && candidate.kind !== 'hold') {
+        score -= 64 + candidate.cost * 0.02;
       }
     }
 
@@ -678,13 +730,14 @@ export class AiSystem {
 
     const snapshot = this.buildSnapshot();
     const mode = this.pickMode(snapshot);
+    const shouldBankHardForAge = this.shouldBankHardForAge(snapshot);
     const roster = this.context.getRoster();
     const frontliner = this.selectFrontliner(roster, mode);
     const ranged = this.selectRanged(roster, mode);
     const cheapest = [...roster].sort((left, right) => left.cost - right.cost)[0];
 
     this.debug(
-      `decision#${this.decisionCount} mode=${mode} age=${snapshot.aiAgeIndex + 1} enemyAge=${snapshot.enemyAgeIndex + 1} gold=${Math.floor(snapshot.aiGold)} laneAdv=${Math.floor(snapshot.laneAdvantage)} pressure=${snapshot.underPressure ? 'high' : 'low'}`,
+      `decision#${this.decisionCount} mode=${mode} age=${snapshot.aiAgeIndex + 1} enemyAge=${snapshot.enemyAgeIndex + 1} gold=${Math.floor(snapshot.aiGold)} laneAdv=${Math.floor(snapshot.laneAdvantage)} pressure=${snapshot.underPressure ? 'high' : 'low'} queue=${snapshot.aiQueueCount}/${snapshot.aiQueueLimit}${shouldBankHardForAge ? ' bankForAge=on' : ''}`,
     );
 
     const candidates: ActionCandidate[] = [];
@@ -808,6 +861,15 @@ export class AiSystem {
 
     for (const candidate of rankedCandidates) {
       if (candidate.cost > 0 && this.context.getAiGold() < candidate.cost && candidate.kind !== 'hold') {
+        continue;
+      }
+
+      if (
+        shouldBankHardForAge &&
+        this.isSpawnAction(candidate.kind) &&
+        !snapshot.underPressure &&
+        snapshot.aiBaseHpRatio >= 0.5
+      ) {
         continue;
       }
 

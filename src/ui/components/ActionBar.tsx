@@ -28,6 +28,9 @@ export function ActionBar({ state }: ActionBarProps) {
       : `Max (${state.playerTurretLevel + 1}/${state.playerTurretMaxLevel + 1})`;
 
   const unitById = new Map(state.unitButtons.map((unit) => [unit.unitId, unit]));
+  const nextQueuedUnit = state.playerQueuePreview[0] ? unitById.get(state.playerQueuePreview[0]) : undefined;
+  const nextSpawnProgress =
+    nextQueuedUnit && nextQueuedUnit.spawnEtaMs !== null ? nextQueuedUnit.spawnProgress : 0;
 
   return (
     <div className="pointer-events-none absolute inset-x-0 bottom-0 translate-y-1 p-1 sm:translate-y-2 sm:p-2">
@@ -100,6 +103,20 @@ export function ActionBar({ state }: ActionBarProps) {
           {queueFull && <span className="text-[10px] text-rose-200/90">Queue full</span>}
         </div>
 
+        <div
+          className="mb-2 h-1.5 overflow-hidden rounded-full bg-slate-700/80"
+          title={
+            nextQueuedUnit && nextQueuedUnit.spawnEtaMs !== null
+              ? `${nextQueuedUnit.name} spawns in ${(nextQueuedUnit.spawnEtaMs / 1000).toFixed(1)}s`
+              : 'Queue empty'
+          }
+        >
+          <div
+            className="h-full rounded-full bg-gradient-to-r from-cyan-400 to-sky-300 transition-[width] duration-120"
+            style={{ width: `${Math.round(nextSpawnProgress * 100)}%` }}
+          />
+        </div>
+
         <div className="grid grid-cols-3 gap-2 sm:grid-cols-6">
           {state.unitButtons.map((unit) => {
             const missingGold = state.gold < unit.cost;
@@ -126,7 +143,6 @@ export function ActionBar({ state }: ActionBarProps) {
                 </div>
 
                 <div className="truncate text-[11px] font-semibold text-slate-100 sm:text-xs">{unit.name}</div>
-                <div className="mt-1 text-[10px] text-cyan-200/90">Spawn: {(unit.spawnRateMs / 1000).toFixed(1)}s</div>
               </button>
             );
           })}

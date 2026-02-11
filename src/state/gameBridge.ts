@@ -23,6 +23,8 @@ function createUnitButtons(ageIndex: number) {
     cost: unit.cost,
     spawnRateMs: unit.cooldownMs,
     queuedCount: 0,
+    spawnEtaMs: null,
+    spawnProgress: 0,
   }));
 }
 

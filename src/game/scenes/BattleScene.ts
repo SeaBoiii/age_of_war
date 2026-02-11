@@ -167,6 +167,8 @@ export class BattleScene extends Phaser.Scene {
         getEnemyAgeIndex: () => this.playerAgeIndex,
         getAiGold: () => this.aiGold,
         getAiIncomePerSecond: () => this.aiIncomePerSecond,
+        getAiQueueCount: () => this.aiSpawnQueue.length,
+        getAiQueueLimit: () => MAX_SPAWN_QUEUE,
         isUnderPressure: () => this.getFrontX('player') > this.aiBase.x - 255,
         getLaneAdvantage: () => this.getLaneAdvantage('ai'),
         getAiBaseHpRatio: () => this.aiBase.hp / Math.max(1, this.aiBase.maxHp),
@@ -206,6 +208,8 @@ export class BattleScene extends Phaser.Scene {
         getEnemyAgeIndex: () => this.aiAgeIndex,
         getAiGold: () => this.playerGold,
         getAiIncomePerSecond: () => this.playerIncomePerSecond,
+        getAiQueueCount: () => this.playerSpawnQueue.length,
+        getAiQueueLimit: () => MAX_SPAWN_QUEUE,
         isUnderPressure: () => this.getFrontX('ai') < this.playerBase.x + 255,
         getLaneAdvantage: () => this.getLaneAdvantage('player'),
         getAiBaseHpRatio: () => this.playerBase.hp / Math.max(1, this.playerBase.maxHp),
@@ -697,8 +701,35 @@ export class BattleScene extends Phaser.Scene {
 
     unit.alive = false;
     if (attackerSide === 'player') {
-      this.playerGold += Math.ceil(unit.def.cost * PLAYER_KILL_BOUNTY_MULTIPLIER);
+      const goldGained = Math.ceil(unit.def.cost * PLAYER_KILL_BOUNTY_MULTIPLIER);
+      this.playerGold += goldGained;
+      this.showGoldGainPopup(unit.x, unit.y - unit.def.size * 0.7, goldGained);
     }
+  }
+
+  private showGoldGainPopup(x: number, y: number, amount: number): void {
+    const popup = this.add
+      .text(x, y, `+${amount}`, {
+        fontFamily: 'Trebuchet MS',
+        fontStyle: 'bold',
+        fontSize: '16px',
+        color: '#fde68a',
+        stroke: '#1f2937',
+        strokeThickness: 3,
+      })
+      .setOrigin(0.5)
+      .setDepth(24);
+
+    this.tweens.add({
+      targets: popup,
+      y: y - 38,
+      alpha: 0,
+      scaleX: 1.08,
+      scaleY: 1.08,
+      ease: 'Cubic.easeOut',
+      duration: 700,
+      onComplete: () => popup.destroy(),
+    });
   }
 
   private damageBase(attackerSide: Side, damage: number): void {
@@ -829,8 +860,22 @@ export class BattleScene extends Phaser.Scene {
 
     const playerAge = getAgeDefinition(this.playerAgeIndex);
     const queueCountByUnit = new Map<UnitId, number>();
+    const queueTimingByUnit = new Map<UnitId, { etaMs: number; progress: number }>();
+    let etaCursorMs = Math.max(0, this.playerQueueCooldownMs);
+
     for (const entry of this.playerSpawnQueue) {
       queueCountByUnit.set(entry.unitId, (queueCountByUnit.get(entry.unitId) ?? 0) + 1);
+
+      if (!queueTimingByUnit.has(entry.unitId)) {
+        const spawnWindowMs = Math.max(1, entry.spawnRateMs);
+        const progress = Math.max(0, Math.min(1, 1 - etaCursorMs / spawnWindowMs));
+        queueTimingByUnit.set(entry.unitId, {
+          etaMs: Math.max(0, Math.round(etaCursorMs)),
+          progress,
+        });
+      }
+
+      etaCursorMs += entry.spawnRateMs;
     }
     const unitButtons: UnitButtonState[] = getUnitsForAge(this.playerAgeIndex).map((unit) => ({
       unitId: unit.id,
@@ -840,6 +885,8 @@ export class BattleScene extends Phaser.Scene {
       cost: unit.cost,
       spawnRateMs: unit.cooldownMs,
       queuedCount: queueCountByUnit.get(unit.id) ?? 0,
+      spawnEtaMs: queueTimingByUnit.get(unit.id)?.etaMs ?? null,
+      spawnProgress: queueTimingByUnit.get(unit.id)?.progress ?? 0,
     }));
 
     this.bridge.applyBattleSnapshot({
